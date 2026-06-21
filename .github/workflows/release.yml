@@ -1,8 +1,9 @@
 name: Release
 
 # Build the Windows installer and publish it to a GitHub Release when a v* tag is pushed.
-# electron-builder uploads the artifacts to a *draft* release for the tag — review the notes
-# (paste the matching CHANGELOG section) and click Publish to make it public.
+# A single draft release is created up front so electron-builder's parallel asset uploads
+# all attach to it (uploading without a pre-existing release races and spawns duplicate
+# drafts). Review the notes (paste the matching CHANGELOG section) and click Publish.
 on:
   push:
     tags:
@@ -23,6 +24,11 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run build:cli
+      - name: Ensure a single draft release exists
+        shell: bash
+        run: gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --draft --title "$GITHUB_REF_NAME" --notes "Draft for $GITHUB_REF_NAME — replace with the matching CHANGELOG section before publishing."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: npx electron-builder --win --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
