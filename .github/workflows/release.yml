@@ -1,0 +1,28 @@
+name: Release
+
+# Build the Windows installer and publish it to a GitHub Release when a v* tag is pushed.
+# electron-builder uploads the artifacts to a *draft* release for the tag — review the notes
+# (paste the matching CHANGELOG section) and click Publish to make it public.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write # create the release and upload installer assets
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run build:cli
+      - run: npx electron-builder --win --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

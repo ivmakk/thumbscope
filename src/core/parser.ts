@@ -1,0 +1,473 @@
+import CFB from 'cfb'
+import type { CatalogEntry, ParseResult, Payload, ThumbEntry } from './types'
+
+const DIGITS = /^[0-9]+$/
+const SIZE_HASH = /^[0-9]+_[0-9a-fA-F]+$/
+const GUID = /^\{[0-9a-fA-F-]+\}$/
+
+// FILETIME (100ns since 1601) -> JS Date
+function filetimeToDate(lo: number, hi: number): Date | null {
+  const ft = hi * 4294967296 + lo // 64-bit, fits in double for realistic dates
+  if (!ft) return null
+  const ms = ft / 10000 - 11644473600000
+  return new Date(ms)
+}
+
+// Parse Catalog stream -> Map<index, {name, date}>.
+// Header length is read from the stream (8 for ehthumbs, 16 for classic); entry layout is shared.
+function parseCatalog(buf: Buffer): Map<number, CatalogEntry> {
+  const map = new Map<number, CatalogEntry>()
+  if (!buf || buf.length < 8) return map
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
+  let off = dv.getUint16(0, true) // header length
+  if (off < 8 || off > buf.length) off = 16
+  while (off + 16 <= buf.length) {
+    const entryLen = dv.getUint32(off, true)
+    if (entryLen < 16 || off + entryLen > buf.length) break
+    const index = dv.getUint32(off + 4, true)
+    const lo = dv.getUint32(off + 8, true)
+    const hi = dv.getUint32(off + 12, true)
+    const date = filetimeToDate(lo, hi)
+    const nameBytes = buf.subarray(off + 16, off + entryLen)
+    const name = Buffer.from(nameBytes).toString('utf16le').replace(/\0+$/g, '').trim()
+    map.set(index, { name, date })
+    off += entryLen
+  }
+  return map
+}
+
+// stream name digits are stored reversed: "21" -> index 12
+function streamNameToIndex(name: string): number | null {
+  const m = name.replace(/[^0-9]/g, '')
+  if (!m) return null
+  return parseInt(m.split('').reverse().join(''), 10)
+}
+
+// Catalog "names" are sometimes GUIDs (variant B); treat those as no real name.
+function realName(name: string | undefined): string | null {
+  if (!name || GUID.test(name)) return null
+  return name
+}
+
+// Find embedded JPEG: scan to first SOI (`FF D8 FF`, handles MS thumbstream prefix),
+// trim to the last EOI (`FF D9`) so trailing junk is dropped.
+function sliceJpeg(buf: Buffer): Buffer | null {
+  let start = -1
+  for (let i = 0; i + 2 < buf.length; i++) {
+    if (buf[i] === 0xff && buf[i + 1] === 0xd8 && buf[i + 2] === 0xff) {
+      start = i
+      break
+    }
+  }
+  if (start < 0) return null
+  for (let j = buf.length - 1; j > start + 1; j--) {
+    if (buf[j - 1] === 0xff && buf[j] === 0xd9) return buf.subarray(start, j + 1)
+  }
+  return buf.subarray(start)
+}
+
+// Decode width/height from a JPEG's first SOF marker.
+function jpegDimensions(buf: Buffer): { width: number; height: number } | null {
+  let i = 2 // skip SOI
+  while (i + 9 < buf.length) {
+    if (buf[i] !== 0xff) {
+      i++
+      continue
+    }
+    const marker = buf[i + 1]
+    // standalone markers carry no length
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd9)) {
+      i += 2
+      continue
+    }
+    const len = (buf[i + 2] << 8) | buf[i + 3]
+    // SOF0..SOF15 hold dimensions, except DHT(C4)/JPG(C8)/DAC(CC)
+    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+      const height = (buf[i + 5] << 8) | buf[i + 6]
+      const width = (buf[i + 7] << 8) | buf[i + 8]
+      return { width, height }
+    }
+    if (len < 2) break
+    i += 2 + len
+  }
+  return null
+}
+
+// ehthumbs DIB. Header: u32 headerSize@0, *signed* i32 stride@8 (sign = row direction, abs = bytes
+// per row), u32 width@12, u32 height@16. Pixels are 24bpp BGR or 32bpp BGRA (channels derived from
+// stride). Normalizes to tightly-packed top-down RGB so display (BMP) and export (sharp) are uniform.
+function parseDib(buf: Buffer): { width: number; height: number; pixels: Buffer } | null {
+  if (buf.length < 24) return null
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
+  const headerSize = dv.getUint32(0, true)
+  if (headerSize < 24 || headerSize > buf.length) return null
+  const strideSigned = dv.getInt32(8, true)
+  const width = dv.getUint32(12, true)
+  const height = dv.getUint32(16, true)
+  if (width <= 0 || height <= 0 || width > 20000 || height > 20000) return null
+  const stride = Math.abs(strideSigned)
+  if (stride < width * 3) return null
+  const channels = stride >= width * 4 ? 4 : 3
+  const bottomUp = strideSigned < 0
+  if (headerSize + stride * height > buf.length) return null
+
+  const out = Buffer.alloc(width * height * 3)
+  for (let y = 0; y < height; y++) {
+    const srcRow = bottomUp ? height - 1 - y : y
+    let s = headerSize + srcRow * stride
+    let d = y * width * 3
+    for (let x = 0; x < width; x++) {
+      out[d] = buf[s + 2] // R
+      out[d + 1] = buf[s + 1] // G
+      out[d + 2] = buf[s] // B
+      s += channels
+      d += 3
+    }
+  }
+  return { width, height, pixels: out }
+}
+
+// Decode a complete BMP file (`BM` + BITMAPINFOHEADER, 24/32bpp) to tightly-packed top-down RGB —
+// the same normalized form parseDib produces. IrfanView stores each thumbnail as a full BMP (unlike
+// ehthumbs' raw DIB), so rows are padded to a 4-byte boundary and pixel data starts at the file's
+// declared offset. Positive header height = bottom-up (the BMP norm), negative = top-down.
+function parseBmp(buf: Buffer): { width: number; height: number; pixels: Buffer } | null {
+  if (buf.length < 54 || buf[0] !== 0x42 || buf[1] !== 0x4d) return null // 'BM'
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
+  const dataOffset = dv.getUint32(10, true)
+  const dibSize = dv.getUint32(14, true)
+  if (dibSize < 40) return null // need a BITMAPINFOHEADER
+  const width = dv.getInt32(18, true)
+  const heightRaw = dv.getInt32(22, true)
+  const bpp = dv.getUint16(28, true)
+  if (width <= 0 || width > 20000) return null
+  const height = Math.abs(heightRaw)
+  if (height <= 0 || height > 20000) return null
+  if (bpp !== 24 && bpp !== 32) return null
+  const channels = bpp / 8
+  const stride = (width * channels + 3) & ~3 // BMP rows pad to 4 bytes
+  if (dataOffset + stride * height > buf.length) return null
+  const bottomUp = heightRaw > 0
+
+  const out = Buffer.alloc(width * height * 3)
+  for (let y = 0; y < height; y++) {
+    const srcRow = bottomUp ? height - 1 - y : y
+    let s = dataOffset + srcRow * stride
+    let d = y * width * 3
+    for (let x = 0; x < width; x++) {
+      out[d] = buf[s + 2] // R
+      out[d + 1] = buf[s + 1] // G
+      out[d + 2] = buf[s] // B
+      s += channels
+      d += 3
+    }
+  }
+  return { width, height, pixels: out }
+}
+
+// Route a stream's bytes to a payload by signature. DIB first (strict header), then JPEG.
+function classify(content: Buffer): Payload | null {
+  const dib = parseDib(content)
+  if (dib) return { kind: 'dib', width: dib.width, height: dib.height, pixels: dib.pixels }
+  const jpeg = sliceJpeg(content)
+  if (jpeg) return { kind: 'jpeg', data: jpeg }
+  return null
+}
+
+function isThumbStream(name: string): boolean {
+  return DIGITS.test(name) || SIZE_HASH.test(name)
+}
+
+// Error thrown when the input is not an OLE2/CFB compound file at all (vs. a parseable but
+// corrupt one). Lets the caller show a precise message instead of a cryptic cfb internal error.
+export class NotCfbError extends Error {
+  constructor() {
+    super('Not an OLE2 compound file — Thumbs.db / ehthumbs.db files are compound (OLE2) files.')
+    this.name = 'NotCfbError'
+  }
+}
+
+const CARVE_MIN_BYTES = 256 // ignore tiny SOI..EOI runs (icons/EXIF noise) when recovering
+
+// Scan a whole buffer for JPEG runs (SOI `FF D8 FF` .. EOI `FF D9`), non-overlapping. Used to
+// recover thumbnails from a damaged/truncated container the CFB reader can't open. A run with no
+// trailing EOI (truncated file) is kept from SOI to end so partial images still render.
+function carveJpegs(buf: Buffer): Buffer[] {
+  const out: Buffer[] = []
+  let i = 0
+  while (i + 2 < buf.length) {
+    if (buf[i] !== 0xff || buf[i + 1] !== 0xd8 || buf[i + 2] !== 0xff) {
+      i++
+      continue
+    }
+    let end = -1
+    for (let j = i + 3; j + 1 < buf.length; j++) {
+      if (buf[j] === 0xff && buf[j + 1] === 0xd9) {
+        end = j + 2
+        break
+      }
+    }
+    if (end < 0) {
+      if (buf.length - i >= CARVE_MIN_BYTES) out.push(buf.subarray(i))
+      break
+    }
+    if (end - i >= CARVE_MIN_BYTES) out.push(buf.subarray(i, end))
+    i = end
+  }
+  return out
+}
+
+// Recovery path: build entries from raw-carved JPEGs. No catalog, so labels are positional only.
+function carveFallback(fileBuffer: Buffer): ParseResult {
+  const entries: ThumbEntry[] = []
+  let index = 0
+  for (const data of carveJpegs(fileBuffer)) {
+    index++
+    const d = jpegDimensions(data)
+    entries.push({
+      index,
+      streamName: `carved-${index}`,
+      name: null,
+      label: `#${index}`,
+      date: null,
+      width: d?.width ?? null,
+      height: d?.height ?? null,
+      size: data.length,
+      payload: { kind: 'jpeg', data }
+    })
+  }
+  return { count: entries.length, failed: 0, catalogCount: 0, entries, recovered: true }
+}
+
+// IrfanView ivThumbs.db: an OLE2 container marked by a `_Thumbs_DB_Ver` stream. Unlike classic
+// Thumbs.db it has no Catalog — each stream is named with the original filename directly, and the
+// payload is a 16-byte prefix (8-byte FILETIME + two u32 flags) followed by a complete BMP file.
+const IRFAN_VER_STREAM = '_Thumbs_DB_Ver'
+const IRFAN_PREFIX = 16 // FILETIME(8) + 2x u32
+
+// Read the FILETIME that prefixes an IrfanView payload.
+function irfanDate(content: Buffer): Date | null {
+  if (content.length < 8) return null
+  const dv = new DataView(content.buffer, content.byteOffset, content.byteLength)
+  return filetimeToDate(dv.getUint32(0, true), dv.getUint32(4, true))
+}
+
+// IrfanView payload = 16-byte prefix + BMP. Strip the prefix and decode the BMP to a DIB payload
+// (reusing the display/export pipeline). Fall back to a generic classify if the body isn't a BMP.
+function classifyIrfan(content: Buffer): Payload | null {
+  const body = content.length > IRFAN_PREFIX ? content.subarray(IRFAN_PREFIX) : content
+  const bmp = parseBmp(body)
+  if (bmp) return { kind: 'dib', width: bmp.width, height: bmp.height, pixels: bmp.pixels }
+  return classify(content)
+}
+
+function parseIrfanView(cfbObj: ReturnType<typeof CFB.read>): ParseResult {
+  const entries: ThumbEntry[] = []
+  let failed = 0
+  for (const e of cfbObj.FileIndex) {
+    // Streams only; skip the version marker and any control-prefixed name (OLE metadata streams
+    // like \x05SummaryInformation and the SheetJS \x01 watermark our fixture writer injects).
+    if (e.type !== 2 || e.name === IRFAN_VER_STREAM || e.name.charCodeAt(0) < 0x20) continue
+    const content = Buffer.from(e.content as Uint8Array)
+    const payload = classifyIrfan(content)
+    if (!payload) {
+      failed++
+      continue
+    }
+    let width: number | null = null
+    let height: number | null = null
+    if (payload.kind === 'jpeg') {
+      const d = jpegDimensions(payload.data)
+      if (d) {
+        width = d.width
+        height = d.height
+      }
+    } else {
+      width = payload.width
+      height = payload.height
+    }
+    entries.push({
+      index: null,
+      streamName: e.name,
+      name: e.name, // stream name is the original filename
+      label: e.name,
+      date: irfanDate(content),
+      width,
+      height,
+      size: payload.kind === 'jpeg' ? payload.data.length : payload.pixels.length,
+      payload
+    })
+  }
+  entries.sort((a, b) => a.streamName.localeCompare(b.streamName))
+  return { count: entries.length, failed, catalogCount: 0, entries, recovered: false }
+}
+
+// Nested IrfanView ivThumbs.db: a sub-variant where each filename is a CFB *storage* whose directory
+// entry carries the stream size but no start sector (objType 0, start = ENDOFCHAIN) — so the standard
+// reader can't reach the bytes (parseIrfanView yields zero). The payloads still sit in the file as a
+// regular grid of [16-byte prefix + complete BMP] blocks, so carve them directly. A block is a `BM`
+// header with a BITMAPINFOHEADER, preceded by a prefix whose two trailing u32 flags are both 1.
+interface IrfanBlock {
+  prefixOff: number
+  bmpOff: number
+  bmpSize: number
+  date: Date | null
+}
+
+function carveIrfanBlocks(buf: Buffer): IrfanBlock[] {
+  if (buf.length < IRFAN_PREFIX + 54) return []
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
+  const cands: IrfanBlock[] = []
+  for (let i = IRFAN_PREFIX; i + 54 < buf.length; i++) {
+    if (buf[i] !== 0x42 || buf[i + 1] !== 0x4d) continue // 'BM'
+    if (dv.getUint32(i + 10, true) !== 54 || dv.getUint32(i + 14, true) !== 40) continue // dataOffset, BIH size
+    if (dv.getUint32(i - 8, true) !== 1 || dv.getUint32(i - 4, true) !== 1) continue // prefix flag signature
+    const bmpSize = dv.getUint32(i + 2, true)
+    if (bmpSize < 54 || i + bmpSize > buf.length) continue
+    cands.push({ prefixOff: i - IRFAN_PREFIX, bmpOff: i, bmpSize, date: irfanDate(buf.subarray(i - IRFAN_PREFIX)) })
+  }
+  // Keep a non-overlapping sequence. A spurious leading hit (a master/preview BMP embedded in the
+  // header region) overlaps the first real block, so if the first candidate overlaps the second,
+  // start carving from the second instead.
+  const pick = (list: IrfanBlock[]): IrfanBlock[] => {
+    const out: IrfanBlock[] = []
+    let end = -1
+    for (const c of list) {
+      if (c.prefixOff >= end) {
+        out.push(c)
+        end = c.bmpOff + c.bmpSize
+      }
+    }
+    return out
+  }
+  if (cands.length > 1 && cands[0].bmpOff + cands[0].bmpSize > cands[1].prefixOff) return pick(cands.slice(1))
+  return pick(cands)
+}
+
+function parseIrfanViewNested(fileBuffer: Buffer, cfbObj: ReturnType<typeof CFB.read>): ParseResult {
+  const blocks = carveIrfanBlocks(fileBuffer)
+  if (blocks.length === 0) return { count: 0, failed: 0, catalogCount: 0, entries: [], recovered: false }
+  // Ordered leaf names from the directory (the storages). Pair with carved blocks by position only
+  // when the counts match exactly — without start sectors the filename↔block mapping is best-effort.
+  const names = cfbObj.FileIndex.filter(
+    (e) => e.type !== 5 && e.name !== IRFAN_VER_STREAM && e.name.charCodeAt(0) >= 0x20
+  ).map((e) => e.name)
+  const paired = names.length === blocks.length
+
+  const entries: ThumbEntry[] = []
+  let failed = 0
+  blocks.forEach((blk, i) => {
+    const bmp = parseBmp(fileBuffer.subarray(blk.bmpOff, blk.bmpOff + blk.bmpSize))
+    if (!bmp) {
+      failed++
+      return
+    }
+    const name = paired ? names[i] : null
+    entries.push({
+      index: null,
+      streamName: `ivnested-${i + 1}`,
+      name,
+      label: name ?? `#${i + 1}`,
+      date: blk.date,
+      width: bmp.width,
+      height: bmp.height,
+      size: bmp.pixels.length,
+      payload: { kind: 'dib', width: bmp.width, height: bmp.height, pixels: bmp.pixels }
+    })
+  })
+  return { count: entries.length, failed, catalogCount: 0, entries, recovered: false }
+}
+
+// Parse a Thumbs.db / ehthumbs.db / ivThumbs.db file buffer.
+export function parseThumbsDb(fileBuffer: Buffer): ParseResult {
+  let cfbObj: ReturnType<typeof CFB.read>
+  try {
+    cfbObj = CFB.read(fileBuffer, { type: 'buffer' })
+  } catch {
+    // Container unreadable (truncated / partly corrupt) — try to recover raw JPEGs before giving up.
+    const carved = carveFallback(fileBuffer)
+    if (carved.count > 0) return carved
+    throw new NotCfbError()
+  }
+  // IrfanView ivThumbs.db: detected by the version-marker stream. Flat variant first (filename
+  // streams); if that yields nothing, the nested-storage variant (carve BMP blocks from the buffer).
+  if (cfbObj.FileIndex.some((e) => e.type === 2 && e.name === IRFAN_VER_STREAM)) {
+    const flat = parseIrfanView(cfbObj)
+    if (flat.count > 0) return flat
+    const nested = parseIrfanViewNested(fileBuffer, cfbObj)
+    if (nested.count > 0) return nested
+  }
+
+  let catalog = new Map<number, CatalogEntry>()
+  const streams: { name: string; content: Buffer }[] = []
+  for (const e of cfbObj.FileIndex) {
+    if (e.type !== 2) continue // stream
+    const content = Buffer.from(e.content as Uint8Array)
+    if (e.name === 'Catalog') {
+      catalog = parseCatalog(content)
+    } else if (isThumbStream(e.name)) {
+      streams.push({ name: e.name, content })
+    }
+  }
+
+  const entries: ThumbEntry[] = []
+  let failed = 0
+  for (const s of streams) {
+    const payload = classify(s.content)
+    if (!payload) {
+      failed++
+      continue
+    }
+
+    let index: number | null = null
+    let name: string | null = null
+    let date: Date | null = null
+    let label: string
+
+    if (SIZE_HASH.test(s.name)) {
+      // Vista: no catalog; label is the hash after the underscore.
+      label = s.name.slice(s.name.indexOf('_') + 1)
+    } else {
+      index = streamNameToIndex(s.name)
+      const meta = (index != null && catalog.get(index)) || undefined
+      name = realName(meta?.name)
+      date = meta?.date ?? null
+      label = name ?? (index != null ? `#${index}` : s.name)
+    }
+
+    let width: number | null = null
+    let height: number | null = null
+    if (payload.kind === 'jpeg') {
+      const d = jpegDimensions(payload.data)
+      if (d) {
+        width = d.width
+        height = d.height
+      }
+    } else {
+      width = payload.width
+      height = payload.height
+    }
+
+    entries.push({
+      index,
+      streamName: s.name,
+      name,
+      label,
+      date,
+      width,
+      height,
+      size: payload.kind === 'jpeg' ? payload.data.length : payload.pixels.length,
+      payload
+    })
+  }
+
+  // Container parsed but yielded no usable thumbnails — fall back to raw carving (e.g. directory
+  // intact but stream chains corrupt). Only used when the normal path found nothing.
+  if (entries.length === 0) {
+    const carved = carveFallback(fileBuffer)
+    if (carved.count > 0) return carved
+  }
+
+  entries.sort((a, b) => (a.index ?? 0) - (b.index ?? 0) || a.streamName.localeCompare(b.streamName))
+  return { count: entries.length, failed, catalogCount: catalog.size, entries, recovered: false }
+}

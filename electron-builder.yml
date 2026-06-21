@@ -1,0 +1,39 @@
+appId: com.thumbscope.app
+productName: Thumbscope
+directories:
+  output: release
+  buildResources: build
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!spikes/*'
+  - '!docs/*'
+  - '!tests/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!electron-builder.yml'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!{components.json,.nvmrc,.gitignore,CLAUDE.md}'
+# sharp is a native module: its binary + bundled libvips must live outside the asar archive,
+# or the packaged app cannot dlopen them.
+asarUnpack:
+  - '**/node_modules/sharp/**'
+  - '**/node_modules/@img/**'
+# Bundled standalone CLI, shipped beside the app (outside asar). A thumbscope.cmd wrapper
+# (build/installer.nsh) runs it via the installed Electron-as-Node, resolving sharp from
+# app.asar.unpacked. The installer adds $INSTDIR to PATH so `thumbscope` works in any terminal.
+extraResources:
+  - from: out/cli
+    to: cli
+win:
+  icon: build/icon.ico
+  target:
+    - nsis
+nsis:
+  oneClick: false
+  perMachine: true
+  allowToChangeInstallationDirectory: true
+  artifactName: ${name}-${version}-setup.${ext}
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  createDesktopShortcut: always
+  include: build/installer.nsh

@@ -1,0 +1,130 @@
+<a id="readme-top"></a>
+
+<br />
+<div align="center">
+  <a href="https://github.com/ivmakk/thumbscope">
+    <img src="docs/images/logo.png" alt="Thumbscope logo" width="96" height="96">
+  </a>
+
+  <h1 align="center">Thumbscope</h1>
+
+  <p align="center">
+    Open, browse, and export thumbnails from Windows <code>Thumbs.db</code> / <code>ehthumbs.db</code> and other proprietary thumbnail-cache databases.
+    <br />
+    <br />
+    <a href="https://github.com/ivmakk/thumbscope/releases">Download</a>
+    &middot;
+    <a href="https://github.com/ivmakk/thumbscope/issues/new">Report Bug</a>
+    &middot;
+    <a href="https://github.com/ivmakk/thumbscope/issues/new">Request Feature</a>
+  </p>
+</div>
+
+<div align="center">
+  <img src="docs/images/app-screenshot.png" alt="Thumbscope browsing a Thumbs.db: thumbnail grid on the left, larger preview of the selected image on the right" width="886" />
+</div>
+
+## 1. Overview
+
+Cross-platform desktop app (Electron + React + TypeScript) to open proprietary thumbnail-cache databases, visually inspect the stored images in a thumbnail or list view with a larger preview of the selected one, and export thumbnails to a folder as JPEGs (stored original or resized/upscaled). It started with the classic Windows `Thumbs.db` / `ehthumbs.db` family and is extending to other packed/proprietary thumbnail caches. A `thumbscope` CLI ships alongside the GUI for terminal use.
+
+- Browse stored images as thumbnails or in a list, with a larger preview of the selected one. Images load lazily, so large databases stay responsive.
+- Export to a folder as JPEG — stored original, or resized/upscaled — with optional CSV metadata.
+- Recovers raw JPEGs from truncated / partly-corrupt containers (carve fallback).
+- Read-only — never modifies the source database.
+
+### 1.1. Supported formats
+
+| Format | Stored image | Description |
+|---|---|---|
+| `Thumbs.db` (Windows 2000 / XP) | JPEG | Original Windows folder thumbnail cache, with real filenames and dates. — OLE2/CFB with a `Catalog` stream (16-byte header); names (or GUIDs) + dates from the catalog. |
+| `Thumbs.db` (Windows Vista / 7) | JPEG | Newer per-folder cache; thumbnails only, no filenames. — OLE2/CFB, no catalog; per-size streams (`<size>_<hash>`), JPEG behind a Microsoft thumbstream header; hash labels. |
+| `ehthumbs.db` | BMP / DIB | Windows Media Center cache, with filenames and dates. — OLE2/CFB, 8-byte catalog header; 24/32bpp DIB payloads. |
+| `ivThumbs.db` (IrfanView) | BMP | IrfanView's thumbnail database, with real filenames and dates. — OLE2/CFB marked by a `_Thumbs_DB_Ver` stream, no catalog; filename-named streams of FILETIME-prefixed BMP; flat and nested layouts. |
+
+More formats are on the roadmap.
+
+## 2. Installation
+
+Windows only for now. Download the latest installer from the [**Releases**](https://github.com/ivmakk/thumbscope/releases/latest) page (`thumbscope-<version>-setup.exe`) and run it.
+
+The installer lets you choose:
+
+- the install location,
+- optional Explorer context-menu entries for `Thumbs.db` / `ehthumbs.db` files,
+- whether to add the `thumbscope` CLI to your `PATH`.
+
+The build is unsigned, so Windows SmartScreen may show an "unrecognized app" prompt on first run — choose **More info → Run anyway** to proceed. macOS and Linux builds are not provided yet.
+
+## 3. Development
+
+### 3.1. Prerequisites
+
+- **Node.js 24** (see `.nvmrc`, currently `24.17.0`). The build and tests rely on Node 24 stripping TypeScript types natively, so an older major will not work.
+- **npm** (bundled with Node).
+
+Native modules (`sharp`) are rebuilt against Electron during packaging; no extra system dependencies are required for development on a supported platform.
+
+### 3.2. Setup
+
+From the project root:
+
+```sh
+npm install
+```
+
+### 3.3. Run the app
+
+```sh
+npm run dev
+```
+
+Starts the electron-vite dev server and launches Electron with renderer hot-module reload.
+
+### 3.4. Run the CLI from source
+
+```sh
+npm run cli -- <args>
+# example:
+npm run cli -- list sample/Thumbs.db
+```
+
+`sample/Thumbs.db` is a committed synthetic, SFW 100-thumbnail file for manual testing.
+
+### 3.5. Testing
+
+```sh
+npm test                            # node --test over src/**/*.test.ts
+node --test src/core/parser.test.ts # single file
+```
+
+Node 24 strips TypeScript types natively, so the `.ts` test files run directly with no build step.
+
+### 3.6. Type-checking
+
+```sh
+npm run typecheck
+```
+
+Runs `tsc --noEmit` for both the node and web projects. `npm run build` does **not** type-check — run this separately.
+
+### 3.7. Building & packaging
+
+```sh
+npm run build       # production build into out/ (no type-check)
+npm run dist:win    # full Windows NSIS installer (build + bundled CLI) -> release/
+npm run pack:dir    # unpacked build, no installer, for quick inspection
+npm run build:icons # regenerate the icon set from build/icon.svg (only when art changes)
+```
+
+### 3.8. Project structure
+
+- `src/core/` — pure, platform-agnostic logic (parser, image normalization, export pipeline) shared by main and CLI. No Electron or DOM imports.
+- `src/main/` — Electron main process: window, IPC handlers, shell-launch open. `cfb` and `sharp` live here.
+- `src/preload/` — the `contextBridge` API surface (`window.api`); the typed IPC contract.
+- `src/renderer/` — sandboxed React page (menubar, grid, table, preview, export dialog).
+- `src/cli/` — `commander` CLI calling straight into `src/core`.
+
+## 4. License
+
+GPL-3.0-only. See [`LICENSE`](LICENSE). Contributions are accepted under [`CONTRIBUTING.md`](CONTRIBUTING.md).
