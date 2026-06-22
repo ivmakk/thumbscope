@@ -10,10 +10,6 @@ on:
   push:
     tags:
       - 'v*'
-    # TEMP — remove before merging to main. Lets this branch test the CI build (build-only,
-    # no publish; artifacts uploaded to the run) before workflow_dispatch is available on main.
-    branches:
-      - 'feat/1-macos-support'
   workflow_dispatch: {}
 
 permissions:
