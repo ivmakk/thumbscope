@@ -1,20 +1,55 @@
 name: Release
 
-# Build the Windows installer and publish it to a GitHub Release when a v* tag is pushed.
-# A single draft release is created up front so electron-builder's parallel asset uploads
-# all attach to it (uploading without a pre-existing release races and spawns duplicate
-# drafts). Review the notes (paste the matching CHANGELOG section) and click Publish.
+# Build the Windows + macOS installers. Two ways to run:
+#   • Push a v* tag  → publish the artifacts to a GitHub draft Release (review notes, click Publish).
+#   • Run manually (workflow_dispatch) → build only, NO publish; the .dmg/.exe are uploaded as run
+#     artifacts so you can download and test the clean-runner build before tagging a release.
+# The draft release is created up front in its own job (only on tag pushes) so the parallel build
+# jobs' uploads all attach to it; creating it from within the matrix would race and spawn duplicates.
 on:
   push:
     tags:
       - 'v*'
+    # TEMP — remove before merging to main. Lets this branch test the CI build (build-only,
+    # no publish; artifacts uploaded to the run) before workflow_dispatch is available on main.
+    branches:
+      - 'feat/1-macos-support'
+  workflow_dispatch: {}
 
 permissions:
   contents: write # create the release and upload installer assets
 
+# Serialize runs for the same ref so a re-pushed tag (or a dispatch overlapping a tag run) can't
+# attach assets to the same draft release in parallel. Don't cancel an in-flight publish midway —
+# that could leave a draft with partial assets.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  release:
-    runs-on: windows-latest
+  draft:
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure a single draft release exists
+        run: gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft --title "$GITHUB_REF_NAME" --notes "Draft for $GITHUB_REF_NAME — replace with the matching CHANGELOG section before publishing."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    needs: draft
+    # Run after draft on tag pushes (result: success); also run on manual dispatch, where draft is
+    # skipped — a skipped dependency would otherwise skip this job too.
+    if: ${{ always() && (needs.draft.result == 'success' || needs.draft.result == 'skipped') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+          - os: macos-latest
+            platform: mac
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -24,11 +59,20 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run build:cli
-      - name: Ensure a single draft release exists
-        shell: bash
-        run: gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --draft --title "$GITHUB_REF_NAME" --notes "Draft for $GITHUB_REF_NAME — replace with the matching CHANGELOG section before publishing."
+      # Publish only for tag pushes; manual runs build without publishing.
+      - run: npx electron-builder --${{ matrix.platform }} ${{ startsWith(github.ref, 'refs/tags/') && '--publish always' || '--publish never' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - run: npx electron-builder --win --publish always
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS build is unsigned/un-notarized for now: skip code signing instead of
+          # failing on a missing Developer ID cert. No-op on the Windows runner.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - name: Upload build artifacts (any non-tag run)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: thumbscope-${{ matrix.platform }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+          if-no-files-found: error

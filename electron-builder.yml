@@ -24,6 +24,20 @@ asarUnpack:
 extraResources:
   - from: out/cli
     to: cli
+mac:
+  icon: build/icon.icns
+  category: public.app-category.utilities
+  target:
+    - target: dmg
+      arch: arm64
+    - target: zip
+      arch: arm64
+  artifactName: ${name}-${version}-${arch}.${ext}
+  # POSIX CLI launcher shipped beside the bundled CLI; user symlinks it onto PATH
+  # (no install hook on a drag-installed .dmg). Merges with the top-level CLI copy.
+  extraResources:
+    - from: build/thumbscope
+      to: cli/thumbscope
 win:
   icon: build/icon.ico
   target:

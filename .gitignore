@@ -225,6 +225,9 @@ $RECYCLE.BIN/
 .claude/settings.local.json
 # Claude's private project-instruction layer (real paths / machine notes).
 CLAUDE.local.md
+# Local-only skills: any skill dir suffixed -local stays untracked (machine/private workflow).
+# Shared skills (no suffix) are committed.
+.claude/skills/*-local/
 
 ### Project-specific ###
 # electron-builder output
