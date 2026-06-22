@@ -62,6 +62,9 @@ test('release workflow builds both platforms and skips mac signing', () => {
   assert.match(wf, /windows-latest/)
   assert.match(wf, /macos-latest/)
   assert.match(wf, /CSC_IDENTITY_AUTO_DISCOVERY:\s*false/)
-  // draft release is created only for tag pushes (its own gated job)
-  assert.match(wf, /if:\s*startsWith\(github\.ref,\s*'refs\/tags\/'\)/)
+  // Gating keys off the EVENT TYPE, not just the ref: a workflow_dispatch run targeting a tag ref
+  // must not publish. Draft + publish only on tag pushes; manual dispatch only uploads artifacts.
+  assert.match(wf, /if:\s*github\.event_name == 'push' && startsWith\(github\.ref,\s*'refs\/tags\/'\)/)
+  assert.match(wf, /github\.event_name == 'push' && '--publish always' \|\| '--publish never'/)
+  assert.match(wf, /if:\s*\$\{\{\s*github\.event_name == 'workflow_dispatch'\s*\}\}/)
 })
