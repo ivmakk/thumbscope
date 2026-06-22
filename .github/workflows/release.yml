@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   draft:
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
       - name: Ensure a single draft release exists
@@ -56,14 +56,14 @@ jobs:
       - run: npm run build
       - run: npm run build:cli
       # Publish only for tag pushes; manual runs build without publishing.
-      - run: npx electron-builder --${{ matrix.platform }} ${{ startsWith(github.ref, 'refs/tags/') && '--publish always' || '--publish never' }}
+      - run: npx electron-builder --${{ matrix.platform }} ${{ github.event_name == 'push' && '--publish always' || '--publish never' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # macOS build is unsigned/un-notarized for now: skip code signing instead of
           # failing on a missing Developer ID cert. No-op on the Windows runner.
           CSC_IDENTITY_AUTO_DISCOVERY: false
-      - name: Upload build artifacts (any non-tag run)
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+      - name: Upload build artifacts (manual dispatch runs)
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         uses: actions/upload-artifact@v4
         with:
           name: thumbscope-${{ matrix.platform }}
