@@ -94,3 +94,4 @@ DIB payload (24-byte header): `u32 headerSize@0`, **signed `i32 stride@8`** (neg
 - `.db` is not unique to Thumbs.db (SQLite etc.), so do **not** force a default file association on `.db`. Context-menu entries only; association is opt-in in the installer.
 - Keep `src/core` free of Electron/DOM imports.
 - Do not commit automatically — the user commits manually.
+- **Issue linkage**: branch as `feat/<N>-<slug>` (bare number, no `#`). Keep the conventional-commit subject and add `Refs #<N>` in the commit footer + PR body to cross-link without auto-closing. Don't use closing keywords (`Closes/Fixes/Resolves`) — issues are closed manually.

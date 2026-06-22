@@ -1,0 +1,30 @@
+#!/bin/sh
+# thumbscope CLI launcher (macOS).
+#
+# Runs the bundled CLI through the app's own Electron binary in Node mode
+# (ELECTRON_RUN_AS_NODE), so no separate Node install is needed. NODE_PATH
+# covers the unpacked node_modules (native sharp + its .node binaries) and the
+# packed app.asar node_modules (sharp's pure-JS deps like detect-libc).
+#
+# This file ships at Thumbscope.app/Contents/Resources/cli/thumbscope. macOS has
+# no install-time hook (the app is drag-installed from the .dmg), so put it on
+# your PATH manually, e.g.:
+#   ln -s "/Applications/Thumbscope.app/Contents/Resources/cli/thumbscope" /usr/local/bin/thumbscope
+
+# Resolve symlinks so a /usr/local/bin symlink finds the real script location.
+SOURCE="$0"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  case "$SOURCE" in
+    /*) ;;
+    *) SOURCE="$DIR/$SOURCE" ;;
+  esac
+done
+CLI_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
+RES="$(cd "$CLI_DIR/.." && pwd)"            # Contents/Resources
+APP_BIN="$(cd "$RES/.." && pwd)/MacOS/Thumbscope"
+
+export ELECTRON_RUN_AS_NODE=1
+export NODE_PATH="$RES/app.asar.unpacked/node_modules:$RES/app.asar/node_modules"
+exec "$APP_BIN" "$RES/cli/thumbscope.cjs" "$@"

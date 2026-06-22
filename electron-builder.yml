@@ -24,6 +24,21 @@ asarUnpack:
 extraResources:
   - from: out/cli
     to: cli
+  # POSIX CLI launcher; on macOS the user symlinks it onto PATH (no install hook on a
+  # drag-installed .dmg). Kept at top level (not under mac:) so it always ships alongside the
+  # CLI payload regardless of electron-builder's platform-vs-top-level extraResources merge
+  # semantics. Inert on Windows (the NSIS installer writes its own thumbscope.cmd).
+  - from: build/thumbscope
+    to: cli/thumbscope
+mac:
+  icon: build/icon.icns
+  category: public.app-category.utilities
+  target:
+    - target: dmg
+      arch: arm64
+    - target: zip
+      arch: arm64
+  artifactName: ${name}-${version}-${arch}.${ext}
 win:
   icon: build/icon.ico
   target:
