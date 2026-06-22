@@ -1,6 +1,6 @@
 {
   "name": "thumbscope",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "View and export thumbnails from Windows Thumbs.db / ehthumbs.db files",
   "type": "module",
   "main": "./out/main/index.js",
@@ -17,7 +17,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "node --test \"src/**/*.test.ts\"",
     "pack:dir": "electron-vite build && npm run build:cli && electron-builder --dir",
-    "dist:win": "electron-vite build && npm run build:cli && electron-builder --win"
+    "dist:win": "electron-vite build && npm run build:cli && electron-builder --win",
+    "dist:mac": "electron-vite build && npm run build:cli && electron-builder --mac"
   },
   "keywords": [
     "thumbnails",

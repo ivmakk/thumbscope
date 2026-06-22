@@ -46,15 +46,31 @@ More formats are on the roadmap.
 
 ## 2. Installation
 
-Windows only for now. Download the latest installer from the [**Releases**](https://github.com/ivmakk/thumbscope/releases/latest) page (`thumbscope-<version>-setup.exe`) and run it.
+Download the latest build from the [**Releases**](https://github.com/ivmakk/thumbscope/releases/latest) page. Builds are unsigned (see the per-platform notes below). Linux builds are not provided yet.
 
-The installer lets you choose:
+### 2.1. Windows
+
+Download `thumbscope-<version>-setup.exe` and run it. The installer lets you choose:
 
 - the install location,
 - optional Explorer context-menu entries for `Thumbs.db` / `ehthumbs.db` files,
 - whether to add the `thumbscope` CLI to your `PATH`.
 
-The build is unsigned, so Windows SmartScreen may show an "unrecognized app" prompt on first run — choose **More info → Run anyway** to proceed. macOS and Linux builds are not provided yet.
+The build is unsigned, so Windows SmartScreen may show an "unrecognized app" prompt on first run — choose **More info → Run anyway** to proceed.
+
+### 2.2. macOS (Apple Silicon)
+
+Download `thumbscope-<version>-arm64.dmg`, open it, and drag **Thumbscope** to **Applications**. Apple Silicon (M-series) only; Intel Macs are not supported yet.
+
+The build is unsigned and not notarized, so Gatekeeper blocks it on first launch. Open it once via **right-click (or Control-click) → Open → Open**; subsequent launches work normally. (Alternatively: `xattr -dr com.apple.quarantine /Applications/Thumbscope.app`.)
+
+To use the `thumbscope` CLI from a terminal, symlink the bundled launcher onto your `PATH`:
+
+```bash
+ln -s "/Applications/Thumbscope.app/Contents/Resources/cli/thumbscope" /usr/local/bin/thumbscope
+```
+
+`/usr/local/bin` may need `sudo`; or point the symlink at any directory already on your `PATH` (e.g. `~/.local/bin`). The launcher runs the CLI through the app's bundled runtime — no separate Node install needed.
 
 ## 3. Development
 
@@ -113,6 +129,7 @@ Runs `tsc --noEmit` for both the node and web projects. `npm run build` does **n
 ```sh
 npm run build       # production build into out/ (no type-check)
 npm run dist:win    # full Windows NSIS installer (build + bundled CLI) -> release/
+npm run dist:mac    # macOS arm64 .dmg + .zip (build + bundled CLI) -> release/
 npm run pack:dir    # unpacked build, no installer, for quick inspection
 npm run build:icons # regenerate the icon set from build/icon.svg (only when art changes)
 ```
