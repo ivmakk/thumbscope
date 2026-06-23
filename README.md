@@ -9,7 +9,7 @@
   <h1 align="center">Thumbscope</h1>
 
   <p align="center">
-    Open, browse, and export thumbnails from Windows <code>Thumbs.db</code> / <code>ehthumbs.db</code> and other proprietary thumbnail-cache databases.
+    A cross-platform thumbnail-cache viewer for Windows and macOS - open, browse, and export thumbnails from <code>Thumbs.db</code>, <code>ehthumbs.db</code>, and other proprietary databases.
     <br />
     <br />
     <a href="https://github.com/ivmakk/thumbscope/releases">Download</a>
@@ -26,29 +26,37 @@
 
 ## 1. Overview
 
-Cross-platform desktop app (Electron + React + TypeScript) to open proprietary thumbnail-cache databases, visually inspect the stored images in a thumbnail or list view with a larger preview of the selected one, and export thumbnails to a folder as JPEGs (stored original or resized/upscaled). It started with the classic Windows `Thumbs.db` / `ehthumbs.db` family and is extending to other packed/proprietary thumbnail caches. A `thumbscope` CLI ships alongside the GUI for terminal use.
+Cross-platform desktop viewer (Electron + React + TypeScript) to open proprietary thumbnail-cache databases, visually inspect the stored images in a thumbnail or list view with a larger preview of the selected one, and export thumbnails to a folder as JPEGs (stored original or resized/upscaled). Supports the classic Windows `Thumbs.db` / `ehthumbs.db` family and other proprietary thumbnail caches (see [Supported formats](#11-supported-formats)). A `thumbscope` CLI ships alongside the GUI for terminal use.
 
 - Browse stored images as thumbnails or in a list, with a larger preview of the selected one. Images load lazily, so large databases stay responsive.
-- Export to a folder as JPEG — stored original, or resized/upscaled — with optional CSV metadata.
+- Export to a folder as JPEG - stored original, or resized/upscaled - with optional CSV metadata.
 - Recovers raw JPEGs from truncated / partly-corrupt containers (carve fallback).
-- Read-only — never modifies the source database.
+- Read-only - never modifies the source database.
+- Fully offline and private - works with no network access, no telemetry; your thumbnail data never leaves your machine.
 
 ### 1.1. Supported formats
 
 | Format | Stored image | Description |
 |---|---|---|
-| `Thumbs.db` (Windows 2000 / XP) | JPEG | Original Windows folder thumbnail cache, with real filenames and dates. — OLE2/CFB with a `Catalog` stream (16-byte header); names (or GUIDs) + dates from the catalog. |
-| `Thumbs.db` (Windows Vista / 7) | JPEG | Newer per-folder cache; thumbnails only, no filenames. — OLE2/CFB, no catalog; per-size streams (`<size>_<hash>`), JPEG behind a Microsoft thumbstream header; hash labels. |
-| `ehthumbs.db` | BMP / DIB | Windows Media Center cache, with filenames and dates. — OLE2/CFB, 8-byte catalog header; 24/32bpp DIB payloads. |
-| `ivThumbs.db` (IrfanView) | BMP | IrfanView's thumbnail database, with real filenames and dates. — OLE2/CFB marked by a `_Thumbs_DB_Ver` stream, no catalog; filename-named streams of FILETIME-prefixed BMP; flat and nested layouts. |
+| `Thumbs.db` (Windows 2000 / XP) | JPEG | Original Windows folder thumbnail cache, with real filenames and dates. - OLE2/CFB with a `Catalog` stream (16-byte header); names (or GUIDs) + dates from the catalog. |
+| `Thumbs.db` (Windows Vista / 7) | JPEG | Newer per-folder cache; thumbnails only, no filenames. - OLE2/CFB, no catalog; per-size streams (`<size>_<hash>`), JPEG behind a Microsoft thumbstream header; hash labels. |
+| `ehthumbs.db` | BMP / DIB | Windows Media Center cache, with filenames and dates. - OLE2/CFB, 8-byte catalog header; 24/32bpp DIB payloads. |
+| `ivThumbs.db` (IrfanView) | BMP | IrfanView's thumbnail database, with real filenames and dates. - OLE2/CFB marked by a `_Thumbs_DB_Ver` stream, no catalog; filename-named streams of FILETIME-prefixed BMP; flat and nested layouts. |
 
-More formats are on the roadmap.
+More formats are on the roadmap - [suggest one](https://github.com/ivmakk/thumbscope/issues/new) with the format name and its source app.
 
 ## 2. Installation
 
-Download the latest build from the [**Releases**](https://github.com/ivmakk/thumbscope/releases/latest) page. Builds are unsigned (see the per-platform notes below). Linux builds are not provided yet.
+Download the latest build from the [**Releases**](https://github.com/ivmakk/thumbscope/releases/latest) page. Builds are unsigned (see the per-platform notes below).
 
-### 2.1. Windows
+### 2.1. Requirements
+
+- **Windows** - Windows 10 or 11, 64-bit (x64). 32-bit and Arm64 Windows builds are not provided.
+- **macOS** - Apple Silicon (M-series), macOS 12 (Monterey) or later. Intel Macs are not supported yet.
+
+On older Windows versions or 32-bit Windows, see [Thumbs Viewer](#4-acknowledgements).
+
+### 2.2. Windows
 
 Download `thumbscope-<version>-setup.exe` and run it. The installer lets you choose:
 
@@ -56,9 +64,9 @@ Download `thumbscope-<version>-setup.exe` and run it. The installer lets you cho
 - optional Explorer context-menu entries for `Thumbs.db` / `ehthumbs.db` files,
 - whether to add the `thumbscope` CLI to your `PATH`.
 
-The build is unsigned, so Windows SmartScreen may show an "unrecognized app" prompt on first run — choose **More info → Run anyway** to proceed.
+The build is unsigned, so Windows SmartScreen may show an "unrecognized app" prompt on first run - choose **More info → Run anyway** to proceed.
 
-### 2.2. macOS (Apple Silicon)
+### 2.3. macOS (Apple Silicon)
 
 Download `thumbscope-<version>-arm64.dmg`, open it, and drag **Thumbscope** to **Applications**. Apple Silicon (M-series) only; Intel Macs are not supported yet.
 
@@ -70,7 +78,7 @@ To use the `thumbscope` CLI from a terminal, symlink the bundled launcher onto y
 ln -s "/Applications/Thumbscope.app/Contents/Resources/cli/thumbscope" /usr/local/bin/thumbscope
 ```
 
-`/usr/local/bin` may need `sudo`; or point the symlink at any directory already on your `PATH` (e.g. `~/.local/bin`). The launcher runs the CLI through the app's bundled runtime — no separate Node install needed.
+`/usr/local/bin` may need `sudo`; or point the symlink at any directory already on your `PATH` (e.g. `~/.local/bin`). The launcher runs the CLI through the app's bundled runtime - no separate Node install needed.
 
 ## 3. Development
 
@@ -122,7 +130,7 @@ Node 24 strips TypeScript types natively, so the `.ts` test files run directly w
 npm run typecheck
 ```
 
-Runs `tsc --noEmit` for both the node and web projects. `npm run build` does **not** type-check — run this separately.
+Runs `tsc --noEmit` for both the node and web projects. `npm run build` does **not** type-check - run this separately.
 
 ### 3.7. Building & packaging
 
@@ -136,12 +144,16 @@ npm run build:icons # regenerate the icon set from build/icon.svg (only when art
 
 ### 3.8. Project structure
 
-- `src/core/` — pure, platform-agnostic logic (parser, image normalization, export pipeline) shared by main and CLI. No Electron or DOM imports.
-- `src/main/` — Electron main process: window, IPC handlers, shell-launch open. `cfb` and `sharp` live here.
-- `src/preload/` — the `contextBridge` API surface (`window.api`); the typed IPC contract.
-- `src/renderer/` — sandboxed React page (menubar, grid, table, preview, export dialog).
-- `src/cli/` — `commander` CLI calling straight into `src/core`.
+- `src/core/` - pure, platform-agnostic logic (parser, image normalization, export pipeline) shared by main and CLI. No Electron or DOM imports.
+- `src/main/` - Electron main process: window, IPC handlers, shell-launch open. `cfb` and `sharp` live here.
+- `src/preload/` - the `contextBridge` API surface (`window.api`); the typed IPC contract.
+- `src/renderer/` - sandboxed React page (menubar, grid, table, preview, export dialog).
+- `src/cli/` - `commander` CLI calling straight into `src/core`.
 
-## 4. License
+## 4. Acknowledgements
+
+Thumbscope was inspired by [**Thumbs Viewer**](https://thumbsviewer.github.io/) by [@erickutcher](https://github.com/erickutcher) - a long-running, open-source native Windows tool for legacy thumbnail databases. If you're on an older Windows version or 32-bit Windows that Thumbscope doesn't target, or need formats it doesn't cover (e.g. `Image.db`, `Video.db`), Thumbs Viewer - and its companion **Thumbcache Viewer** for `thumbcache_*.db` - is a great option.
+
+## 5. License
 
 GPL-3.0-only. See [`LICENSE`](LICENSE). Contributions are accepted under [`CONTRIBUTING.md`](CONTRIBUTING.md).
