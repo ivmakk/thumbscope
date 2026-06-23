@@ -51,10 +51,10 @@ Download the latest build from the [**Releases**](https://github.com/ivmakk/thum
 
 ### 2.1. Requirements
 
-- **Windows** - Windows 10 or 11, 64-bit (x64). 32-bit and Arm64 Windows are not provided.
+- **Windows** - Windows 10 or 11, 64-bit (x64). 32-bit and Arm64 Windows builds are not provided.
 - **macOS** - Apple Silicon (M-series), macOS 12 (Monterey) or later. Intel Macs are not supported yet.
 
-On older or 32-bit Windows, see [Thumbs Viewer](#4-acknowledgements).
+On older Windows versions or 32-bit Windows, see [Thumbs Viewer](#4-acknowledgements).
 
 ### 2.2. Windows
 
@@ -152,7 +152,7 @@ npm run build:icons # regenerate the icon set from build/icon.svg (only when art
 
 ## 4. Acknowledgements
 
-Thumbscope was inspired by [**Thumbs Viewer**](https://thumbsviewer.github.io/) by [@erickutcher](https://github.com/erickutcher) - a long-running, open-source native Windows tool for legacy thumbnail databases. If you're on an older or 32-bit Windows that Thumbscope doesn't target, or need formats it doesn't cover (e.g. `Image.db`, `Video.db`), Thumbs Viewer - and its companion **Thumbcache Viewer** for `thumbcache_*.db` - is a great option.
+Thumbscope was inspired by [**Thumbs Viewer**](https://thumbsviewer.github.io/) by [@erickutcher](https://github.com/erickutcher) - a long-running, open-source native Windows tool for legacy thumbnail databases. If you're on an older Windows version or 32-bit Windows that Thumbscope doesn't target, or need formats it doesn't cover (e.g. `Image.db`, `Video.db`), Thumbs Viewer - and its companion **Thumbcache Viewer** for `thumbcache_*.db` - is a great option.
 
 ## 5. License
 
