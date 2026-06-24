@@ -1,7 +1,7 @@
 # Image credits
 
-License-free source photos used as input thumbnails for the synthetic sample/fixture
-thumbnail databases (`sample/Thumbs.db` and per-format test fixtures).
+License-free source photos used as input thumbnails for the real-photo sample database
+`sample/Thumbs-real.db` (built by `scripts/make-sample-thumbsdb.mjs --real`).
 
 All images collected from [Openverse](https://openverse.org) on 2026-06-24, filtered to **CC0 / Public Domain**. Search queries: "nature", "animals".
 All EXIF/IPTC/XMP metadata has been stripped. Files renamed to the repo's `IMG_NNNN.JPG`

@@ -1,6 +1,7 @@
 {
-  // VSCode hides **/Thumbs.db by default (treated as a Windows artifact). Our committed synthetic
-  // sample lives at sample/Thumbs.db, so un-hide just that pattern; other OS-junk excludes stay.
+  // VSCode hides **/Thumbs.db by default (treated as a Windows artifact), which also hides our
+  // committed synthetic sample at sample/Thumbs.db. Re-show every Thumbs.db in the workspace; other
+  // default excludes (.DS_Store, .git, ...) are untouched.
   "files.exclude": {
     "**/Thumbs.db": false
   }

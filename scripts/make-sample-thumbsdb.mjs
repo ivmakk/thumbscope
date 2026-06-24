@@ -18,6 +18,8 @@ const real = rawArgs.includes('--real')
 const positionals = rawArgs.filter((a) => !a.startsWith('-'))
 const imagesDir = 'sample/images'
 const outPath = positionals[0] || (real ? 'sample/Thumbs-real.db' : 'sample/Thumbs.db')
+// --real mode derives the thumbnail count from the image pack, so a count arg would be a silent no-op.
+if (real && positionals[1] !== undefined) throw new Error('--real mode takes no count (it uses every image in the pack)')
 const count = Number(positionals[1]) || 100
 
 // HSV->RGB for varied hues across the set.
@@ -55,7 +57,8 @@ async function makeRealJpeg(src, w, h) {
 
 // Read the CC0/PD pack (sample/images/IMG_NNNN.JPG) in deterministic sorted order.
 async function loadRealImages(dir) {
-  const files = (await readdir(dir)).filter((f) => /^IMG_\d+\.JPG$/i.test(f)).sort()
+  // Require exactly 4 digits (IMG_NNNN.JPG): the pack's zero-padded convention, so lexical .sort() is numeric order.
+  const files = (await readdir(dir)).filter((f) => /^IMG_\d{4}\.JPG$/i.test(f)).sort()
   if (files.length === 0) throw new Error(`no IMG_NNNN.JPG images found in ${dir}`)
   return files
 }
@@ -112,10 +115,14 @@ if (real) {
   }
 }
 
-// Encode all thumbnails concurrently (sharp releases the event loop), then add in order.
-const jpegs = await Promise.all(
-  items.map((it) => (it.src ? makeRealJpeg(it.src, it.w, it.h) : makeJpeg(it.index, it.w, it.h)))
-)
+// Encode in bounded-concurrency batches (sharp releases the event loop), preserving order. A fixed
+// pool keeps memory bounded even when synthetic `count` is large, while still beating a serial loop.
+const POOL = 8
+const jpegs = []
+for (let i = 0; i < items.length; i += POOL) {
+  const batch = items.slice(i, i + POOL)
+  jpegs.push(...(await Promise.all(batch.map((it) => (it.src ? makeRealJpeg(it.src, it.w, it.h) : makeJpeg(it.index, it.w, it.h))))))
+}
 const cfb = CFB.utils.cfb_new()
 CFB.utils.cfb_add(cfb, 'Catalog', buildCatalog(items))
 items.forEach((it, i) => CFB.utils.cfb_add(cfb, '/' + reverseDigits(it.index), jpegs[i]))
