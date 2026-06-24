@@ -3,7 +3,8 @@ import assert from 'node:assert'
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { parseThumbsDb, NotCfbError } from './parser.ts'
-import { buildThumbsDb, buildEhThumbsDb, buildGuidDb, buildVistaDb, buildIrfanThumbsDb, buildIrfanNestedThumbsDb } from './fixture.ts'
+import { decodeType1Rgb } from './jpegType1.ts'
+import { buildThumbsDb, buildEhThumbsDb, buildGuidDb, buildVistaDb, buildIrfanThumbsDb, buildIrfanNestedThumbsDb, buildType1Db } from './fixture.ts'
 import { dibToBmp } from './image.ts'
 
 test('parses all thumbnails from a synthetic Thumbs.db', () => {
@@ -130,6 +131,74 @@ test('parses nested IrfanView (no start sectors) by carving BMP blocks, dropping
   assert.strictEqual(r.entries[0].height, 6)
   assert.strictEqual(r.entries[0].date.toISOString(), '2007-12-27T13:36:14.000Z')
   assert.strictEqual(r.entries[2].date.toISOString(), '2007-12-27T13:36:16.000Z')
+})
+
+test('reconstructs Type 1 streams into SOI+APP0 | 2xDQT | SOF | DHT | scan, no Adobe marker', () => {
+  const r = parseThumbsDb(buildType1Db())
+  const e = r.entries.find((x) => x.index === 1)
+  assert.ok(e)
+  assert.strictEqual(e.payload.kind, 'cmyk')
+  if (e.payload.kind !== 'cmyk') return
+  const b = e.payload.data
+  // Walk the header markers up to the scan; record marker order.
+  assert.strictEqual(b[0], 0xff)
+  assert.strictEqual(b[1], 0xd8) // SOI
+  const markers: number[] = []
+  let i = 2
+  let sof = -1
+  while (i + 3 < b.length) {
+    assert.strictEqual(b[i], 0xff, 'aligned on a marker')
+    const m = b[i + 1]
+    markers.push(m)
+    if (m === 0xc0) sof = i // the SOF0 marker (0xff) offset
+    if (m === 0xda) break // SOS — scan follows
+    const len = (b[i + 2] << 8) | b[i + 3]
+    i += 2 + len
+  }
+  assert.strictEqual(markers[0], 0xe0, 'APP0 (JFIF) first')
+  assert.strictEqual(markers.filter((m) => m === 0xdb).length, 2, 'exactly two DQT segments')
+  assert.strictEqual(markers.filter((m) => m === 0xee).length, 0, 'no APP14/Adobe marker')
+  assert.strictEqual(markers.filter((m) => m === 0xc0).length, 1, 'one SOF0')
+  assert.strictEqual(markers.filter((m) => m === 0xc4).length, 2, 'two DHT segments (DC + AC)')
+  assert.strictEqual(markers[markers.length - 1], 0xda, 'ends at the scan')
+  // SOF carries the 4 components tagged R,G,B,A — the spliced frame came from the source stream.
+  // From the 0xff marker: len@+2, precision@+4, height@+5, width@+7, ncomp@+9, comp ids @+10/+13/+16/+19.
+  assert.ok(sof > 0)
+  assert.strictEqual(b[sof + 9], 4) // component count
+  assert.deepStrictEqual([b[sof + 10], b[sof + 13], b[sof + 16], b[sof + 19]], [0x52, 0x47, 0x42, 0x41])
+})
+
+test('reconstructs Type 1 (headerless XP) streams and decodes them to faithful RGB', () => {
+  const r = parseThumbsDb(buildType1Db())
+  assert.strictEqual(r.count, 2)
+  assert.strictEqual(r.failed, 0)
+  const e = r.entries.find((x) => x.index === 1)
+  assert.ok(e)
+  assert.strictEqual(e.name, 'PICT0001.JPG') // catalog name preserved
+  assert.strictEqual(e.payload.kind, 'cmyk') // reconstructed, not raw headerless JPEG passthrough
+  assert.strictEqual(e.width, 16) // dims read from the spliced SOF
+  assert.strictEqual(e.height, 16)
+  if (e.payload.kind === 'cmyk') {
+    // index 1 stores components [c0,c1,c2,c3] = [60,40,150,230]; the decoder maps R=c2, G=c1, B=c0 and
+    // ignores the 4th, yielding a single uniform, non-degenerate color across the frame.
+    const { width, height, pixels } = decodeType1Rgb(e.payload.data)
+    assert.strictEqual(width, 16)
+    assert.strictEqual(height, 16)
+    assert.strictEqual(pixels.length, 16 * 16 * 3)
+    const [r0, g0, b0] = pixels
+    assert.ok(Math.abs(r0 - 150) <= 1, 'R = c2')
+    assert.ok(Math.abs(g0 - 40) <= 1, 'G = c1')
+    assert.ok(Math.abs(b0 - 60) <= 1, 'B = c0')
+    let uniform = true
+    for (let p = 0; p < width * height; p++) {
+      if (Math.abs(pixels[p * 3] - r0) > 1 || Math.abs(pixels[p * 3 + 1] - g0) > 1 || Math.abs(pixels[p * 3 + 2] - b0) > 1) {
+        uniform = false
+        break
+      }
+    }
+    assert.ok(uniform, 'a solid stream decodes to a uniform RGB color')
+    assert.ok(r0 + g0 + b0 > 12 && r0 + g0 + b0 < 753, 'not degenerate all-black / all-white')
+  }
 })
 
 test('falls back from GUID names to an index label', () => {

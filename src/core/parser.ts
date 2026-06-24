@@ -93,6 +93,97 @@ function jpegDimensions(buf: Buffer): { width: number; height: number } | null {
   return null
 }
 
+// Windows XP "Type 1" thumbnail: a JPEG whose tables the OS supplies implicitly, so the stream holds
+// only SOI + SOF0 + scan. The frame has four components tagged 'R','G','B','A' (52 47 42 41) but the
+// pixels are an out-of-order CMYK separation. Detect by that exact component signature: a 4-component
+// SOF whose IDs are R,G,B,A — distinct from real CMYK JPEGs (which tag components 1..4 or C,M,Y,K).
+function isType1Jpeg(buf: Buffer): boolean {
+  let i = 2 // skip SOI
+  while (i + 19 < buf.length) {
+    if (buf[i] !== 0xff) {
+      i++
+      continue
+    }
+    const marker = buf[i + 1]
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd9)) {
+      i += 2
+      continue
+    }
+    // A true Type 1 stream is headerless — the OS supplies tables implicitly. A DQT/DHT before the SOF
+    // means this is a full 4-component JPEG carrying its own tables, not a Type 1 stream: leave it for
+    // the plain-jpeg path rather than mis-splicing the standard tables over its real ones.
+    if (marker === 0xdb || marker === 0xc4) return false
+    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+      if (buf[i + 9] !== 4) return false // component count
+      // component IDs sit at i+10, +13, +16, +19 (each spec is 3 bytes)
+      return buf[i + 10] === 0x52 && buf[i + 13] === 0x47 && buf[i + 16] === 0x42 && buf[i + 19] === 0x41
+    }
+    const len = (buf[i + 2] << 8) | buf[i + 3]
+    if (len < 2) break
+    i += 2 + len
+  }
+  return false
+}
+
+// Standard JPEG blocks Windows omits from a Type 1 stream and the OS supplies implicitly. Splicing
+// these around the stream's own SOF + scan yields a decodable JPEG. SOI + APP0(JFIF); the two
+// quantization tables (luminance id 0 + chrominance id 1) — table 0 carries the true Windows values,
+// referenced by every component, so its contents determine the tone; and the standard Annex-K Huffman
+// tables (DC + AC, table 0). The four components are decoded as raw samples and mapped to RGB in
+// reversed channel order (R=c2, G=c1, B=c0, no complement; the 4th/K component ignored) by
+// decodeType1Rgb — no Adobe APP14 is needed. The stored image is
+// bottom-up, so the decoder flips vertically. Tables match the reference tool thumbsviewer; the
+// standard JPEG (Annex-K) tables are not copyrightable. Confirmed against real XP samples.
+const TYPE1_SOI_APP0 = Buffer.from('ffd8ffe000104a46494600010101006000600000', 'hex')
+const TYPE1_DQT = Buffer.from(
+  'ffdb004300080606070605080707070909080a0c140d0c0b0b0c1912130f141d1a1f1e1d1a1c1c20242e2720222c231c1c2837292c30313434341f27393d38323c2e333432ffdb0043010909090c0b0c180d0d1832211c213232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232',
+  'hex'
+)
+const TYPE1_HUFFMAN = Buffer.from(
+  'ffc4001f0000010501010101010100000000000000000102030405060708090a0bffc400b5100002010303020403050504040000017d01020300041105122131410613516107227114328191a1082342b1c11552d1f02433627282090a161718191a25262728292a3435363738393a434445464748494a535455565758595a636465666768696a737475767778797a838485868788898a92939495969798999aa2a3a4a5a6a7a8a9aab2b3b4b5b6b7b8b9bac2c3c4c5c6c7c8c9cad2d3d4d5d6d7d8d9dae1e2e3e4e5e6e7e8e9eaf1f2f3f4f5f6f7f8f9fa',
+  'hex'
+)
+
+// Reconstruct a decodable JPEG from a Type 1 stream by splicing the standard tables around its own
+// SOF + scan: SOI+APP0 | DQT | SOF | HUFFMAN | scan. Cheap (a few buffer slices, no pixel work) so it
+// runs at parse time; decodeType1Rgb does the actual decode lazily on display/export. Returns null if
+// the stream is malformed.
+function reconstructType1(jpg: Buffer): Buffer | null {
+  // Locate the SOF marker by walking the marker chain (the stream is SOI + [maybe segments] + SOF +
+  // SOS + entropy). Don't assume the SOF sits immediately after SOI — isType1Jpeg walks it the same way.
+  let i = 2 // skip SOI (sliceJpeg guarantees the buffer starts FF D8 FF)
+  let frameIdx = -1
+  while (i + 4 <= jpg.length) {
+    if (jpg[i] !== 0xff) {
+      i++
+      continue
+    }
+    const marker = jpg[i + 1]
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd9)) {
+      i += 2
+      continue
+    }
+    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+      frameIdx = i
+      break
+    }
+    const len = (jpg[i + 2] << 8) | jpg[i + 3]
+    if (len < 2) return null
+    i += 2 + len
+  }
+  if (frameIdx < 0 || frameIdx + 4 > jpg.length) return null
+  const frameSize = (jpg[frameIdx + 2] << 8) | jpg[frameIdx + 3]
+  const scanIdx = frameIdx + 2 + frameSize
+  if (scanIdx > jpg.length) return null
+  return Buffer.concat([
+    TYPE1_SOI_APP0,
+    TYPE1_DQT,
+    jpg.subarray(frameIdx, scanIdx),
+    TYPE1_HUFFMAN,
+    jpg.subarray(scanIdx)
+  ])
+}
+
 // ehthumbs DIB. Header: u32 headerSize@0, *signed* i32 stride@8 (sign = row direction, abs = bytes
 // per row), u32 width@12, u32 height@16. Pixels are 24bpp BGR or 32bpp BGRA (channels derived from
 // stride). Normalizes to tightly-packed top-down RGB so display (BMP) and export (sharp) are uniform.
@@ -165,13 +256,33 @@ function parseBmp(buf: Buffer): { width: number; height: number; pixels: Buffer 
   return { width, height, pixels: out }
 }
 
-// Route a stream's bytes to a payload by signature. DIB first (strict header), then JPEG.
+// Route a stream's bytes to a payload by signature. DIB first (strict header), then JPEG. A Type 1
+// JPEG (headerless XP CMYK) is reconstructed into a `cmyk` payload that decodeType1Rgb later renders
+// to RGB; on reconstruction failure it falls back to the raw bytes so the entry still lists.
 function classify(content: Buffer): Payload | null {
   const dib = parseDib(content)
   if (dib) return { kind: 'dib', width: dib.width, height: dib.height, pixels: dib.pixels }
   const jpeg = sliceJpeg(content)
-  if (jpeg) return { kind: 'jpeg', data: jpeg }
+  if (jpeg) {
+    if (isType1Jpeg(jpeg)) {
+      const recon = reconstructType1(jpeg)
+      if (recon) return { kind: 'cmyk', data: recon }
+    }
+    return { kind: 'jpeg', data: jpeg }
+  }
   return null
+}
+
+// Width/height for an entry: from a decoded DIB, else read from the JPEG/CMYK payload's SOF marker.
+function payloadDimensions(payload: Payload): { width: number | null; height: number | null } {
+  if (payload.kind === 'dib') return { width: payload.width, height: payload.height }
+  const d = jpegDimensions(payload.data)
+  return { width: d?.width ?? null, height: d?.height ?? null }
+}
+
+// Byte length reported as the entry `size`.
+function payloadSize(payload: Payload): number {
+  return payload.kind === 'dib' ? payload.pixels.length : payload.data.length
 }
 
 function isThumbStream(name: string): boolean {
@@ -274,18 +385,7 @@ function parseIrfanView(cfbObj: ReturnType<typeof CFB.read>): ParseResult {
       failed++
       continue
     }
-    let width: number | null = null
-    let height: number | null = null
-    if (payload.kind === 'jpeg') {
-      const d = jpegDimensions(payload.data)
-      if (d) {
-        width = d.width
-        height = d.height
-      }
-    } else {
-      width = payload.width
-      height = payload.height
-    }
+    const { width, height } = payloadDimensions(payload)
     entries.push({
       index: null,
       streamName: e.name,
@@ -294,7 +394,7 @@ function parseIrfanView(cfbObj: ReturnType<typeof CFB.read>): ParseResult {
       date: irfanDate(content),
       width,
       height,
-      size: payload.kind === 'jpeg' ? payload.data.length : payload.pixels.length,
+      size: payloadSize(payload),
       payload
     })
   }
@@ -435,18 +535,7 @@ export function parseThumbsDb(fileBuffer: Buffer): ParseResult {
       label = name ?? (index != null ? `#${index}` : s.name)
     }
 
-    let width: number | null = null
-    let height: number | null = null
-    if (payload.kind === 'jpeg') {
-      const d = jpegDimensions(payload.data)
-      if (d) {
-        width = d.width
-        height = d.height
-      }
-    } else {
-      width = payload.width
-      height = payload.height
-    }
+    const { width, height } = payloadDimensions(payload)
 
     entries.push({
       index,
@@ -456,7 +545,7 @@ export function parseThumbsDb(fileBuffer: Buffer): ParseResult {
       date,
       width,
       height,
-      size: payload.kind === 'jpeg' ? payload.data.length : payload.pixels.length,
+      size: payloadSize(payload),
       payload
     })
   }

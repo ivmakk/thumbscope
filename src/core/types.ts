@@ -1,6 +1,7 @@
 export type Payload =
   | { kind: 'jpeg'; data: Buffer }
   | { kind: 'dib'; width: number; height: number; pixels: Buffer } // tightly-packed top-down RGB
+  | { kind: 'cmyk'; data: Buffer } // reconstructed Type 1 (XP) CMYK JPEG; sharp converts to RGB on use
 
 export interface ThumbEntry {
   index: number | null // catalog item id (classic/ehthumbs); null for Vista
