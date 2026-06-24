@@ -4,7 +4,7 @@
 //   --real   — classic JPEG thumbnails resized from the CC0/PD photo pack in sample/images/ (one per image).
 //   --winxp  — the same photo pack encoded as Windows XP "Type 1" thumbnails (abbreviated 4-component
 //              R,G,B,A CMYK JPEGs, no DQT/DHT), to exercise the Type 1 decode path end-to-end.
-// No personal data any way. Usage:
+// No personal data either way. Usage:
 //   node scripts/make-sample-thumbsdb.mjs [outPath] [count]          # synthetic
 //   node scripts/make-sample-thumbsdb.mjs --real [outPath]           # real photos, classic JPEG
 //   node scripts/make-sample-thumbsdb.mjs --winxp [outPath]          # real photos, XP Type 1

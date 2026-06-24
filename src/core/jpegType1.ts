@@ -161,6 +161,7 @@ export function decodeType1Rgb(jpeg: Buffer): { width: number; height: number; p
     const len = (data[i] << 8) | data[i + 1]
     const seg = i + 2
     const segEnd = i + len
+    if (len < 2 || segEnd > data.length) throw new Error('Type 1 decode: segment length exceeds buffer')
     if (marker === 0xdb) {
       // DQT (may carry multiple tables)
       let p = seg
@@ -175,8 +176,9 @@ export function decodeType1Rgb(jpeg: Buffer): { width: number; height: number; p
         }
         qt[tq] = t
       }
-    } else if (marker === 0xc0 || marker === 0xc1) {
-      // SOF0/SOF1 baseline
+    } else if (marker === 0xc0) {
+      // SOF0 baseline, 8-bit only (Type 1 streams are always this shape)
+      if (data[seg] !== 8) throw new Error('Type 1 decode: only 8-bit sample precision supported')
       const h = (data[seg + 1] << 8) | data[seg + 2]
       const w = (data[seg + 3] << 8) | data[seg + 4]
       const nc = data[seg + 5]
