@@ -28,7 +28,7 @@ The repo is public. Don't post PII or machine-identifying detail in an issue, co
    - Issues / PRs: `#12`.
    - Commits: short SHA `1d8d192` auto-links; in prose, full link to `https://github.com/ivmakk/thumbscope/commit/<sha>`.
    - Files / lines: `[src/main/index.ts:239](https://github.com/ivmakk/thumbscope/blob/main/src/main/index.ts#L239)`.
-5. **Labels**: `enhancement`, `bug`, `documentation`, `good first issue`, platform labels (`platform:macos`, `platform:windows`).
+5. **Labels**: `enhancement`, `bug`, `documentation`, `chore` (maintenance/assets/tooling, pairs with the `[Chore]` prefix), `good first issue`, platform labels (`platform:macos`, `platform:windows`).
 6. Body starts directly with the summary — no "Description:" label.
 
 ## Feature issue — community structure
