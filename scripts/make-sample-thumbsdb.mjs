@@ -1,13 +1,24 @@
-// Generate a synthetic, SFW Thumbs.db for GUI testing: ~100 distinct colored JPEG thumbnails
-// with a classic 16-byte catalog (real filenames, FILETIME dates, UTF-16LE names, digit-reversed
-// stream names). No personal data. Usage: node scripts/make-sample-thumbsdb.mjs [outPath] [count]
+// Generate a SFW Thumbs.db for GUI testing with a classic 16-byte catalog (filenames, FILETIME
+// dates, UTF-16LE names, digit-reversed stream names). Two modes:
+//   default  — ~100 distinct synthetic colored-gradient JPEG thumbnails (no source files needed).
+//   --real   — thumbnails resized from the CC0/PD photo pack in sample/images/ (one per image).
+// No personal data either way. Usage:
+//   node scripts/make-sample-thumbsdb.mjs [outPath] [count]          # synthetic
+//   node scripts/make-sample-thumbsdb.mjs --real [outPath]           # real photos
 
-import { writeFile } from 'node:fs/promises'
+import { writeFile, readdir, mkdir } from 'node:fs/promises'
+import { join, dirname } from 'node:path'
 import CFB from 'cfb'
 import sharp from 'sharp'
 
-const outPath = process.argv[2] || 'sample/Thumbs.db'
-const count = Number(process.argv[3]) || 100
+const rawArgs = process.argv.slice(2)
+const unknownFlag = rawArgs.find((a) => a.startsWith('-') && a !== '--real')
+if (unknownFlag) throw new Error(`unknown flag: ${unknownFlag} (the only flag is --real)`)
+const real = rawArgs.includes('--real')
+const positionals = rawArgs.filter((a) => !a.startsWith('-'))
+const imagesDir = 'sample/images'
+const outPath = positionals[0] || (real ? 'sample/Thumbs-real.db' : 'sample/Thumbs.db')
+const count = Number(positionals[1]) || 100
 
 // HSV->RGB for varied hues across the set.
 function hsv(h, s, v) {
@@ -34,6 +45,19 @@ async function makeJpeg(i, w, h) {
       fill="rgba(255,255,255,0.9)" text-anchor="middle">${w}×${h}</text>
   </svg>`
   return sharp(Buffer.from(svg)).jpeg({ quality: 82 }).toBuffer()
+}
+
+// Resize a real source photo down to a thumbnail box (aspect preserved, no enlargement). sharp drops
+// all input metadata by default, so the output JPEG carries no EXIF/GPS/etc.
+async function makeRealJpeg(src, w, h) {
+  return sharp(src).resize(w, h, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 82 }).toBuffer()
+}
+
+// Read the CC0/PD pack (sample/images/IMG_NNNN.JPG) in deterministic sorted order.
+async function loadRealImages(dir) {
+  const files = (await readdir(dir)).filter((f) => /^IMG_\d+\.JPG$/i.test(f)).sort()
+  if (files.length === 0) throw new Error(`no IMG_NNNN.JPG images found in ${dir}`)
+  return files
 }
 
 function dateToFiletime(date) {
@@ -72,23 +96,32 @@ const sizes = [
 
 const items = []
 const base = Date.UTC(2008, 0, 1)
-for (let i = 1; i <= count; i++) {
-  const [w, h] = sizes[i % sizes.length]
-  const name = i % 11 === 0 ? `${fancy[i % fancy.length]}_${i}.jpg` : `IMG_${String(i).padStart(4, '0')}.JPG`
-  items.push({ index: i, name, date: new Date(base + i * 86400000 * 3), w, h })
+if (real) {
+  // One thumbnail per source photo, keeping its real (already-generic) IMG_NNNN.JPG filename.
+  const files = await loadRealImages(imagesDir)
+  files.forEach((file, idx) => {
+    const i = idx + 1
+    const [w, h] = sizes[i % sizes.length]
+    items.push({ index: i, name: file, date: new Date(base + i * 86400000 * 3), w, h, src: join(imagesDir, file) })
+  })
+} else {
+  for (let i = 1; i <= count; i++) {
+    const [w, h] = sizes[i % sizes.length]
+    const name = i % 11 === 0 ? `${fancy[i % fancy.length]}_${i}.jpg` : `IMG_${String(i).padStart(4, '0')}.JPG`
+    items.push({ index: i, name, date: new Date(base + i * 86400000 * 3), w, h })
+  }
 }
 
+// Encode all thumbnails concurrently (sharp releases the event loop), then add in order.
+const jpegs = await Promise.all(
+  items.map((it) => (it.src ? makeRealJpeg(it.src, it.w, it.h) : makeJpeg(it.index, it.w, it.h)))
+)
 const cfb = CFB.utils.cfb_new()
 CFB.utils.cfb_add(cfb, 'Catalog', buildCatalog(items))
-for (const it of items) {
-  const jpeg = await makeJpeg(it.index, it.w, it.h)
-  CFB.utils.cfb_add(cfb, '/' + reverseDigits(it.index), jpeg)
-}
+items.forEach((it, i) => CFB.utils.cfb_add(cfb, '/' + reverseDigits(it.index), jpegs[i]))
 const buf = Buffer.from(CFB.write(cfb, { type: 'buffer' }))
 
 // Ensure the output dir exists, then write.
-const { mkdir } = await import('node:fs/promises')
-const { dirname } = await import('node:path')
 await mkdir(dirname(outPath), { recursive: true })
 await writeFile(outPath, buf)
 console.log(`wrote ${outPath} — ${items.length} thumbnails, ${(buf.length / 1024).toFixed(0)} KB`)
