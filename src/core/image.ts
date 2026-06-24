@@ -31,8 +31,11 @@ export function dibToBmp(width: number, height: number, pixels: Buffer): Buffer 
   return buf
 }
 
-// A renderable image buffer + MIME type for a parsed payload.
+// A renderable image buffer + MIME type for a parsed payload. `cmyk` payloads (reconstructed Type 1)
+// need decodeType1Rgb + a sharp wrap (async, Node-only), so they're handled by the caller (get-image /
+// export via renderCmyk), not here — keeping this module sync and sharp-free.
 export function payloadToImage(payload: Payload): { mime: string; data: Buffer } {
   if (payload.kind === 'jpeg') return { mime: 'image/jpeg', data: payload.data }
-  return { mime: 'image/bmp', data: dibToBmp(payload.width, payload.height, payload.pixels) }
+  if (payload.kind === 'dib') return { mime: 'image/bmp', data: dibToBmp(payload.width, payload.height, payload.pixels) }
+  throw new Error('cmyk payload requires async decode (use renderCmyk / decodeType1Rgb)')
 }

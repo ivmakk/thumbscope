@@ -3,7 +3,7 @@ import { readFile, readdir } from 'node:fs/promises'
 import { app, BrowserWindow, dialog, ipcMain, shell, clipboard, Menu, nativeTheme } from 'electron'
 import { parseThumbsDb } from '../core/parser.ts'
 import { payloadToImage } from '../core/image.ts'
-import { exportEntries, type ExportSummary } from '../core/encode.ts'
+import { exportEntries, renderCmyk, type ExportSummary } from '../core/encode.ts'
 import type { SizeMode } from '../core/export.ts'
 import { firstPathArg, resolveDbPath } from '../core/shell.ts'
 import type { ThumbEntry } from '../core/types.ts'
@@ -127,9 +127,16 @@ ipcMain.handle('open-file', openViaDialog)
 
 ipcMain.handle('open-path', (_e, path: string) => openPath(path))
 
-ipcMain.handle('get-image', (_e, streamName: string) => {
+ipcMain.handle('get-image', async (_e, streamName: string) => {
   const entry = current?.entries.get(streamName)
   if (!entry) return null
+  if (entry.payload.kind === 'cmyk') {
+    try {
+      return { mime: 'image/png', bytes: await renderCmyk(entry.payload.data) } // Type 1 decode -> PNG
+    } catch {
+      return null // subsampled/non-baseline decode throws -> entry lists without an image
+    }
+  }
   const img = payloadToImage(entry.payload)
   return { mime: img.mime, bytes: img.data } // Buffer -> Uint8Array over IPC
 })
