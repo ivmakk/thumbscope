@@ -1,0 +1,7 @@
+{
+  // VSCode hides **/Thumbs.db by default (treated as a Windows artifact). Our committed synthetic
+  // sample lives at sample/Thumbs.db, so un-hide just that pattern; other OS-junk excludes stay.
+  "files.exclude": {
+    "**/Thumbs.db": false
+  }
+}
