@@ -159,10 +159,10 @@ if (usesPack) {
 // Encode in bounded-concurrency batches (sharp releases the event loop), preserving order. A fixed
 // pool keeps memory bounded even when synthetic `count` is large, while still beating a serial loop.
 const POOL = 8
-const jpegs = []
+const payloads = [] // per-mode stream bytes: JPEG, XP abbrev-jpeg, or prefixed PNG
 for (let i = 0; i < items.length; i += POOL) {
   const batch = items.slice(i, i + POOL)
-  jpegs.push(
+  payloads.push(
     ...(await Promise.all(
       batch.map((it) =>
         png ? makePngStream(it.src) : winxp ? makeWinxpStream(it.src, it.w, it.h) : it.src ? makeRealJpeg(it.src, it.w, it.h) : makeJpeg(it.index, it.w, it.h)
@@ -173,10 +173,10 @@ for (let i = 0; i < items.length; i += POOL) {
 const cfb = CFB.utils.cfb_new()
 if (png) {
   // hashed-png: no Catalog; streams named `256_<hash>` carry the prefixed PNG payload.
-  items.forEach((it, i) => CFB.utils.cfb_add(cfb, '/' + pngStreamName(it.name), jpegs[i]))
+  items.forEach((it, i) => CFB.utils.cfb_add(cfb, '/' + pngStreamName(it.name), payloads[i]))
 } else {
   CFB.utils.cfb_add(cfb, 'Catalog', buildCatalog(items))
-  items.forEach((it, i) => CFB.utils.cfb_add(cfb, '/' + reverseDigits(it.index), jpegs[i]))
+  items.forEach((it, i) => CFB.utils.cfb_add(cfb, '/' + reverseDigits(it.index), payloads[i]))
 }
 const buf = Buffer.from(CFB.write(cfb, { type: 'buffer' }))
 

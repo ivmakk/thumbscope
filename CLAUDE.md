@@ -66,7 +66,7 @@ Classic `Thumbs.db` is an **OLE2 / Compound File Binary** container (magic `D0 C
 | `catalog-dib` | ehthumbs media (DIB) | `ehthumbs.db`, 8-byte catalog header | raw 24bpp `dib` |
 | `irfanview-flat` | IrfanView (flat) | `_Thumbs_DB_Ver` stream, no Catalog, streams named by filename | 16-byte prefix + BMP → `dib` (`parseIrfanView`) |
 | `irfanview-nested` | IrfanView (nested) | filenames are CFB storages with no start sector | carve `[prefix+BMP]` grid (`parseIrfanViewNested`) |
-| `recovered` | Recovered (carved) | unreadable container, raw JPEGs survive | carved `FF D8`…`FF D9`, `recovered: true` |
+| `recovered` | Recovered (carved) | unreadable container, raw JPEGs (or PNGs) survive | carved `FF D8`…`FF D9` (or PNG runs when no JPEG survives), `recovered: true` |
 
 `parser.ts` is **one unified parser**: honor the real catalog header length (8 or 16 - don't clamp), accept both stream-name shapes (digit-reversed and `<size>_<hash>`), route payloads **DIB-first but strict** (header 24 AND w>0 AND h>0 AND pixels fit) then PNG (signature scan, before JPEG so a PNG body's stray `FF D8 FF` isn't mis-sliced) else JPEG. Edge inputs (16 KB of zeros, macOS `._` stubs) are not CFB - `CFB.read` throws; reject without crashing. **Recovery fallback** runs only when the container throws or a normal parse finds zero thumbs (never on healthy files): carve raw JPEG runs from the whole buffer (or PNG runs if no JPEG survives; positional `#n` labels, no catalog metadata); the renderer shows an amber recovery banner. Do not assume other variant filenames (`Image.db`, etc.) share any layout; verify per format.
 

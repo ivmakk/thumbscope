@@ -355,21 +355,33 @@ function carveJpegs(buf: Buffer): Buffer[] {
   return out
 }
 
-const PNG_IEND = Buffer.from('49454e44', 'hex') // 'IEND' chunk type; followed by a 4-byte CRC
-
 // Scan a whole buffer for PNG runs (signature+IHDR .. end of the IEND chunk), non-overlapping. The PNG
 // analogue of carveJpegs, used to recover thumbnails from a damaged hashed-png container CFB can't open.
-// A run with no IEND (truncated file) is kept from the signature to end so partial images still render.
+// The end is found by walking the chunk chain (each chunk: u32be length + 4-byte type + data + u32 CRC)
+// until the IEND chunk - a plain `indexOf('IEND')` would false-match those 4 bytes inside compressed
+// IDAT data and truncate the slice. A run with no IEND (truncated file) is kept from the signature to
+// end so partial images still render.
 function carvePngs(buf: Buffer): Buffer[] {
   const out: Buffer[] = []
   let i = 0
   while ((i = buf.indexOf(PNG_SIG_IHDR, i)) >= 0) {
-    const iend = buf.indexOf(PNG_IEND, i + PNG_SIG_IHDR.length)
-    if (iend < 0) {
-      if (buf.length - i >= CARVE_MIN_BYTES) out.push(buf.subarray(i))
+    let pos = i + 8 // first chunk (IHDR) starts right after the 8-byte signature
+    let end = -1
+    while (pos + 8 <= buf.length) {
+      const len = buf.readUInt32BE(pos)
+      const type = buf.toString('latin1', pos + 4, pos + 8)
+      const next = pos + 12 + len // length(4) + type(4) + data(len) + CRC(4)
+      if (type === 'IEND') {
+        end = Math.min(next, buf.length)
+        break
+      }
+      if (next > buf.length || next <= pos) break // truncated or malformed chunk
+      pos = next
+    }
+    if (end < 0) {
+      if (buf.length - i >= CARVE_MIN_BYTES) out.push(buf.subarray(i)) // no IEND: keep to end
       break
     }
-    const end = Math.min(iend + 8, buf.length) // 'IEND' (4) + CRC (4)
     if (end - i >= CARVE_MIN_BYTES) out.push(buf.subarray(i, end))
     i = end
   }
