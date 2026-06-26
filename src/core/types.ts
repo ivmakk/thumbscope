@@ -1,5 +1,6 @@
 export type Payload =
   | { kind: 'jpeg'; data: Buffer }
+  | { kind: 'png'; data: Buffer } // PNG passthrough (hashed-png streams); natively displayable and sharp-ingestable
   | { kind: 'dib'; width: number; height: number; pixels: Buffer } // tightly-packed top-down RGB
   | { kind: 'abbrev-jpeg'; data: Buffer } // reconstructed abbrev-jpeg (XP) JPEG; decodeAbbrevRgb maps it to RGB on use
 

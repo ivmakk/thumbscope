@@ -4,7 +4,7 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { parseThumbsDb, NotCfbError } from './parser.ts'
 import { decodeAbbrevRgb } from './jpegAbbrev.ts'
-import { buildThumbsDb, buildEhThumbsDb, buildGuidDb, buildVistaDb, buildIrfanThumbsDb, buildIrfanNestedThumbsDb, buildAbbrevJpegDb } from './fixture.ts'
+import { buildThumbsDb, buildEhThumbsDb, buildGuidDb, buildVistaDb, buildHashedPngDb, buildIrfanThumbsDb, buildIrfanNestedThumbsDb, buildAbbrevJpegDb } from './fixture.ts'
 import { dibToBmp } from './image.ts'
 
 test('parses all thumbnails from a synthetic Thumbs.db', () => {
@@ -89,6 +89,23 @@ test('parses Vista size_hash streams with no Catalog (JPEG behind 24-byte prefix
   assert.strictEqual(e.name, null)
   assert.strictEqual(e.label, '31bd239b11dd5a70') // hash after underscore
   assert.strictEqual(e.payload.kind, 'jpeg')
+})
+
+test('parses hashed-png size_hash streams with no Catalog (PNG behind 24-byte prefix)', () => {
+  const r = parseThumbsDb(buildHashedPngDb())
+  assert.strictEqual(r.catalogCount, 0)
+  assert.strictEqual(r.count, 2)
+  assert.strictEqual(r.failed, 0)
+  assert.strictEqual(r.recovered, false)
+  const e = r.entries[0]
+  assert.strictEqual(e.index, null)
+  assert.strictEqual(e.name, null)
+  assert.strictEqual(e.label, '24ecf3db3592c791') // hash after underscore
+  assert.strictEqual(e.payload.kind, 'png') // not misrouted to jpeg/dib
+  assert.strictEqual(e.width, 3) // from IHDR
+  assert.strictEqual(e.height, 2)
+  // 24-byte MS prefix stripped: payload starts at the PNG signature.
+  assert.deepStrictEqual([...e.payload.data.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 })
 
 test('parses IrfanView ivThumbs.db (filename streams, BMP payloads, no catalog)', () => {
@@ -273,6 +290,23 @@ test('keeps a truncated (no-EOI) JPEG when recovering', () => {
   const r = parseThumbsDb(partial)
   assert.strictEqual(r.recovered, true)
   assert.strictEqual(r.count, 1)
+})
+
+// 64x64 PNG (560 bytes, over the carve floor), used to exercise PNG recovery carving.
+const BIG_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAB4klEQVRogWNgSDyk3PLUbTlH5intnrd+6wUKLxlP+Rq2XaLylvWcv3H7FRofOS9hTTuu0fnKew1v3nmDiZ+Ct4iWXbeY+St6j2zdfYeFTMlHVNuee6zkyj6j2/c+YKNQ8RXTad8jdkpV37Gd9z/hoFLzE9dl7Bkntbrf+K7jL7hoNPlL6DbxiptWs//E7pNveOi0mCX1mHrHS6/VPLnn9Cd8DNosUnrNfMbPqN0ytffsFzAmHVZpfea+gjPrtE7vO/8NgkWXTaZ+C98hWXXbZu6/eIYDik2PXZaypZ/Q7Hrts5Yv/4LhpM8hW8XKb1jO+h2zV67+geMi5pSjau0vPFdx55zV6/8QuEm45KrZ9B+Ru6Rr7trNH+gAYKA0BAY6ABgGOgkcoDQABjoJNIzmgYejeWDxaB5IHa0Hjo3WAx2j9YDXaFto9WhbKHe0LaQ/2h+YMNofCBrtD4iM9olLR/vE5qN94p+j40JRo+NCMqPjQvdGx0btR8dGGUfHRg+Pzg+ojM4PPBudH1gxOkfGOTpHdnp0jqx3dJ743eg88YbReeKi0bUSl0fXSkwdXSsRPrpeaMfoeqGq0fVCo2vmbEbXzP0bXTPHMNDLJh1G140uHF03mjy6blR1dO1025BdOw0AAGHpWv2hQacAAAAASUVORK5CYII=',
+  'base64'
+)
+
+test('recovers PNGs from a damaged / non-CFB container when no JPEG survives', () => {
+  const buf = Buffer.concat([Buffer.alloc(32, 0), BIG_PNG])
+  const r = parseThumbsDb(buf)
+  assert.strictEqual(r.recovered, true)
+  assert.strictEqual(r.count, 1)
+  assert.strictEqual(r.entries[0].payload.kind, 'png')
+  assert.strictEqual(r.entries[0].label, '#1')
+  assert.strictEqual(r.entries[0].width, 64)
+  assert.strictEqual(r.entries[0].height, 64)
 })
 
 test('healthy file is not flagged as recovered', () => {

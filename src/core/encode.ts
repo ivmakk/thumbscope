@@ -28,6 +28,13 @@ export async function encodeJpeg(
       .jpeg({ quality })
       .toBuffer()
   }
+  if (payload.kind === 'png') {
+    // Export always emits JPEG, so a PNG payload always re-encodes (no byte passthrough).
+    const img = sharp(payload.data)
+    const target = width && height ? targetDimensions(width, height, mode) : null
+    if (target) img.resize(target.width, target.height, { kernel: 'lanczos3' }).sharpen()
+    return img.jpeg({ quality }).toBuffer()
+  }
   if (payload.kind === 'abbrev-jpeg') {
     // Reconstructed abbrev-jpeg JPEG: our decoder yields upright packed RGB (reversed-channel copy, no
     // complement, K ignored, already flipped), so sharp just ingests raw RGB — no CMYK profile, no flip.

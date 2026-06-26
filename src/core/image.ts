@@ -36,6 +36,7 @@ export function dibToBmp(width: number, height: number, pixels: Buffer): Buffer 
 // export via renderAbbrevJpeg), not here — keeping this module sync and sharp-free.
 export function payloadToImage(payload: Payload): { mime: string; data: Buffer } {
   if (payload.kind === 'jpeg') return { mime: 'image/jpeg', data: payload.data }
+  if (payload.kind === 'png') return { mime: 'image/png', data: payload.data }
   if (payload.kind === 'dib') return { mime: 'image/bmp', data: dibToBmp(payload.width, payload.height, payload.pixels) }
   throw new Error('abbrev-jpeg payload requires async decode (use renderAbbrevJpeg / decodeAbbrevRgb)')
 }

@@ -13,6 +13,7 @@ Format specs for everything Thumbscope reads, plus reference notes on a format i
 | 1.6 | `catalog-dib` | `ehthumbs.db` | [ehthumbs media (DIB)](#16-ehthumbs-media-dib--catalog-dib) | ✅ supported |
 | 1.7 | `irfanview-flat` / `irfanview-nested` | `ivThumbs.db` | [IrfanView](#17-irfanview--irfanview-flat--irfanview-nested) | ✅ supported |
 | 1.9 | `recovered` | any (corrupt container) | [Recovered (carved)](#19-recovered-carved--recovered) | ✅ fallback |
+| 1.10 | `hashed-png` | `Thumbs.db` | [Hashed PNG](#110-hashed-png--hashed-png) | ✅ supported |
 | 2 | - | `thumbcache_*.db` | [thumbcache (CMMM)](#2-thumbcache_db-cmmm--not-supported) | ❌ not supported |
 
 Supporting sections: [1.1 Container basics](#11-container-basics), [1.8 DIB payload layout](#18-dib-payload-layout).
@@ -56,7 +57,7 @@ Classic catalog/stream layout (real filenames, digit-reversed names), but each p
 
 A self-contained baseline decoder, `decodeAbbrevRgb` in `src/core/jpegAbbrev.ts` (pure, no sharp/DOM), does the actual decode lazily: it reads the raw component samples and maps **`R = c2, G = c1, B = c0`** (reversed order, **no complement**), **ignoring the 4th plane**, flipping vertically (bottom-up storage) - returning upright packed RGB. `renderAbbrevJpeg` (display, via get-image) and the `encodeJpeg` abbrev-jpeg branch (export) both call it, then hand the RGB to sharp (PNG / JPEG; **no `.flip()`** - the decoder already flipped). Decoding only what's viewed keeps parse fast and memory low on big files; subsampled / non-baseline frames throw and the entry falls back to listing-only; reconstruction failure falls back to raw JPEG bytes (entry still lists).
 
-The transform was reverse-engineered from the reference tool **thumbsviewer** (BSD-3-Clause; standard Annex-K tables aren't copyrightable), which reads these via Windows GDI+ `LockBits(32bppCMYK)` then takes `255-C/M/Y` - GDI+ pre-inverts the raw samples, so the two inversions cancel to this plain reversed copy. **Validated ±1 per channel against GDI+ on real XP samples** (from the gitignored corpus); the earlier `255-c` complement was wrong (inverted day↔dusk, green↔magenta) and sharp's generic CMYK→RGB is worse still (applies the 4th plane → near-black). Routed inside `classify` (DIB → abbrev-jpeg → JPEG passthrough).
+The transform was reverse-engineered from the reference tool **thumbsviewer** (BSD-3-Clause; standard Annex-K tables aren't copyrightable), which reads these via Windows GDI+ `LockBits(32bppCMYK)` then takes `255-C/M/Y` - GDI+ pre-inverts the raw samples, so the two inversions cancel to this plain reversed copy. **Validated ±1 per channel against GDI+ on real XP samples** (from the gitignored corpus); the earlier `255-c` complement was wrong (inverted day↔dusk, green↔magenta) and sharp's generic CMYK→RGB is worse still (applies the 4th plane → near-black). Routed inside `classify` (DIB → PNG → abbrev-jpeg → JPEG passthrough).
 
 ## 1.6. ehthumbs media (DIB) - `catalog-dib`
 
@@ -78,9 +79,15 @@ DIB payload (24-byte header): `u32 headerSize@0`, **signed `i32 stride@8`** (neg
 
 ## 1.9. Recovered (carved) - `recovered`
 
-When the container is unreadable (truncated / half-downloaded / partly corrupt) *and* raw JPEG bytes survive, the parser carves `FF D8 FF`…`FF D9` runs from the whole buffer and returns them with `recovered: true` (positional `#n` labels, no catalog metadata - filenames/dates/DIBs are lost with the container). Carving runs only as a fallback (container throws, or normal parse finds zero thumbs), never on healthy files; the renderer shows an amber recovery banner.
+When the container is unreadable (truncated / half-downloaded / partly corrupt) *and* raw image bytes survive, the parser carves `FF D8 FF`…`FF D9` JPEG runs from the whole buffer and returns them with `recovered: true` (positional `#n` labels, no catalog metadata - filenames/dates/DIBs are lost with the container). If no JPEG runs survive it falls back to carving PNG runs (signature+IHDR … end of `IEND`), so a damaged `hashed-png` file still recovers. Carving runs only as a fallback (container throws, or normal parse finds zero thumbs), never on healthy files; the renderer shows an amber recovery banner.
 
 Do not assume other variant filenames (`Image.db`, etc.) share any layout; verify per format. Full validation evidence in `docs/local/project-definition.md`.
+
+## 1.10. Hashed PNG - `hashed-png`
+
+Same container shape as `hashed-jpeg` (OLE2, **no Catalog**, stream names `<size>_<hash>` - use the hash as label), but the payload is **PNG, not JPEG**. Each stream is a **24-byte MS prefix** (`headerSize=24` at offset 0; a payload-type field at offset 4 = `3` for PNG; data size = stream length - 24 at offset 8; an 8-byte checksum) followed by a complete PNG (signature `89 50 4E 47 0D 0A 1A 0A` at offset 24, IHDR dims at sig+16 width / sig+20 height big-endian, `IEND` tail).
+
+`slicePng` finds the PNG signature (stepping over the prefix, like the SOI scan) and slices to the buffer end; `pngDimensions` reads the IHDR. PNG is natively displayable and sharp-ingestable, so the payload is a **passthrough** `png` kind (like `jpeg`, unlike `abbrev-jpeg`/`dib`): `payloadToImage` returns `image/png` as-is, export re-encodes to JPEG via sharp. Routing is by **signature** (the type field is corroboration only); `classify` checks PNG **before** JPEG because a PNG's compressed body can incidentally contain `FF D8 FF` that the JPEG scan would mis-slice. Validated on one real sample (3 thumbnails) cross-checked against thumbsviewer; widen if more samples surface. Committed SFW sample: `sample/Thumbs-png.db` (generator `--png` mode).
 
 ---
 

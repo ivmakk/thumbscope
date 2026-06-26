@@ -4,9 +4,10 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import sharp from 'sharp'
 import { encodeJpeg, renderAbbrevJpeg } from './encode.ts'
+import { payloadToImage } from './image.ts'
 import { parseThumbsDb } from './parser.ts'
 import { decodeAbbrevRgb } from './jpegAbbrev.ts'
-import { buildAbbrevJpegDb } from './fixture.ts'
+import { buildAbbrevJpegDb, buildHashedPngDb } from './fixture.ts'
 import type { Payload } from './types.ts'
 
 const root = join(import.meta.dirname, '..', '..')
@@ -52,6 +53,60 @@ test('encodeJpeg on a abbrev-jpeg payload upscales to 800px on the longer side',
   assert.strictEqual(meta.format, 'jpeg')
   assert.strictEqual(meta.width, 800)
   assert.strictEqual(meta.height, 800)
+})
+
+// The png payload the parser produces for a hashed-png stream (3x2 from the fixture).
+function pngPayload(): { payload: Payload; width: number; height: number } {
+  const r = parseThumbsDb(buildHashedPngDb())
+  const e = r.entries[0]
+  assert.ok(e && e.payload.kind === 'png')
+  return { payload: e.payload, width: e.width as number, height: e.height as number }
+}
+
+test('payloadToImage on a png payload returns the bytes as image/png passthrough', () => {
+  const { payload } = pngPayload()
+  const img = payloadToImage(payload)
+  assert.strictEqual(img.mime, 'image/png')
+  assert.ok(payload.kind === 'png')
+  assert.strictEqual(img.data, payload.data) // passthrough, no copy
+})
+
+test('encodeJpeg on a png payload returns a valid JPEG at original size', async () => {
+  const { payload, width, height } = pngPayload()
+  const jpeg = await encodeJpeg(payload, width, height, 'original', 85)
+  assert.strictEqual(jpeg[0], 0xff)
+  assert.strictEqual(jpeg[1], 0xd8) // SOI
+  const meta = await sharp(jpeg).metadata()
+  assert.strictEqual(meta.format, 'jpeg')
+  assert.strictEqual(meta.width, 3)
+  assert.strictEqual(meta.height, 2)
+})
+
+test('encodeJpeg on a png payload upscales to 800px on the longer side', async () => {
+  const { payload, width, height } = pngPayload()
+  const jpeg = await encodeJpeg(payload, width, height, 'upscale800', 85)
+  const meta = await sharp(jpeg).metadata()
+  assert.strictEqual(meta.format, 'jpeg')
+  assert.strictEqual(meta.width, 800)
+})
+
+// End-to-end against the committed photo sample built by `make-sample-thumbsdb.mjs --png`: it must
+// parse as all-png (hashed-png layout, no Catalog) and each thumbnail must re-encode to a valid JPEG.
+test('the committed Thumbs-png.db sample parses as png and exports valid JPEGs', async () => {
+  const r = parseThumbsDb(readFileSync(join(root, 'sample', 'Thumbs-png.db')))
+  assert.ok(r.count >= 1)
+  assert.strictEqual(r.failed, 0)
+  assert.strictEqual(r.catalogCount, 0)
+  assert.strictEqual(r.recovered, false)
+  assert.ok(r.entries.every((e) => e.payload.kind === 'png'), 'every entry is a png payload')
+
+  const e = r.entries[0]
+  assert.ok(e.width && e.height)
+  const jpeg = await encodeJpeg(e.payload, e.width, e.height, 'original', 85)
+  const meta = await sharp(jpeg).metadata()
+  assert.strictEqual(meta.format, 'jpeg')
+  assert.strictEqual(meta.width, e.width)
+  assert.strictEqual(meta.height, e.height)
 })
 
 // End-to-end against the committed photo sample built by `make-sample-thumbsdb.mjs --winxp`: it must

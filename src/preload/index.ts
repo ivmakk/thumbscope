@@ -6,7 +6,7 @@ export interface ThumbMeta {
   name: string | null
   label: string
   date: string | null
-  format: 'jpeg' | 'dib' | 'abbrev-jpeg'
+  format: 'jpeg' | 'dib' | 'abbrev-jpeg' | 'png'
   width: number | null
   height: number | null
   size: number
