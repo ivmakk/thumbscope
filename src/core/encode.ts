@@ -7,7 +7,7 @@ import { writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import sharp from 'sharp'
 import { targetDimensions, exportFilename, toCsv, type SizeMode, type CsvRow } from './export.ts'
-import { decodeType1Rgb } from './jpegType1.ts'
+import { decodeAbbrevRgb } from './jpegAbbrev.ts'
 import type { Payload, ThumbEntry } from './types.ts'
 
 // Encode one parsed payload to JPEG honoring the size mode.
@@ -28,10 +28,10 @@ export async function encodeJpeg(
       .jpeg({ quality })
       .toBuffer()
   }
-  if (payload.kind === 'cmyk') {
-    // Reconstructed Type 1 JPEG: our decoder yields upright packed RGB (reversed-channel copy, no
+  if (payload.kind === 'abbrev-jpeg') {
+    // Reconstructed abbrev-jpeg JPEG: our decoder yields upright packed RGB (reversed-channel copy, no
     // complement, K ignored, already flipped), so sharp just ingests raw RGB — no CMYK profile, no flip.
-    const rgb = decodeType1Rgb(payload.data)
+    const rgb = decodeAbbrevRgb(payload.data)
     const img = sharp(rgb.pixels, { raw: { width: rgb.width, height: rgb.height, channels: 3 } })
     const target = targetDimensions(rgb.width, rgb.height, mode)
     if (target) img.resize(target.width, target.height, { kernel: 'lanczos3' }).sharpen()
@@ -45,11 +45,11 @@ export async function encodeJpeg(
   return img.jpeg({ quality }).toBuffer()
 }
 
-// Render a reconstructed Type 1 JPEG to a browser-displayable PNG. decodeType1Rgb returns upright
+// Render a reconstructed abbrev-jpeg JPEG to a browser-displayable PNG. decodeAbbrevRgb returns upright
 // packed RGB (reversed-channel copy, no complement, K ignored, already flipped); sharp just wraps it.
 // Used by get-image.
-export async function renderCmyk(data: Buffer): Promise<Buffer> {
-  const rgb = decodeType1Rgb(data)
+export async function renderAbbrevJpeg(data: Buffer): Promise<Buffer> {
+  const rgb = decodeAbbrevRgb(data)
   return sharp(rgb.pixels, { raw: { width: rgb.width, height: rgb.height, channels: 3 } }).png().toBuffer()
 }
 

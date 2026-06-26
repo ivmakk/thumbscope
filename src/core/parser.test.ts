@@ -3,8 +3,8 @@ import assert from 'node:assert'
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { parseThumbsDb, NotCfbError } from './parser.ts'
-import { decodeType1Rgb } from './jpegType1.ts'
-import { buildThumbsDb, buildEhThumbsDb, buildGuidDb, buildVistaDb, buildIrfanThumbsDb, buildIrfanNestedThumbsDb, buildType1Db } from './fixture.ts'
+import { decodeAbbrevRgb } from './jpegAbbrev.ts'
+import { buildThumbsDb, buildEhThumbsDb, buildGuidDb, buildVistaDb, buildIrfanThumbsDb, buildIrfanNestedThumbsDb, buildAbbrevJpegDb } from './fixture.ts'
 import { dibToBmp } from './image.ts'
 
 test('parses all thumbnails from a synthetic Thumbs.db', () => {
@@ -133,12 +133,12 @@ test('parses nested IrfanView (no start sectors) by carving BMP blocks, dropping
   assert.strictEqual(r.entries[2].date.toISOString(), '2007-12-27T13:36:16.000Z')
 })
 
-test('reconstructs Type 1 streams into SOI+APP0 | 2xDQT | SOF | DHT | scan, no Adobe marker', () => {
-  const r = parseThumbsDb(buildType1Db())
+test('reconstructs abbrev-jpeg streams into SOI+APP0 | 2xDQT | SOF | DHT | scan, no Adobe marker', () => {
+  const r = parseThumbsDb(buildAbbrevJpegDb())
   const e = r.entries.find((x) => x.index === 1)
   assert.ok(e)
-  assert.strictEqual(e.payload.kind, 'cmyk')
-  if (e.payload.kind !== 'cmyk') return
+  assert.strictEqual(e.payload.kind, 'abbrev-jpeg')
+  if (e.payload.kind !== 'abbrev-jpeg') return
   const b = e.payload.data
   // Walk the header markers up to the scan; record marker order.
   assert.strictEqual(b[0], 0xff)
@@ -168,20 +168,20 @@ test('reconstructs Type 1 streams into SOI+APP0 | 2xDQT | SOF | DHT | scan, no A
   assert.deepStrictEqual([b[sof + 10], b[sof + 13], b[sof + 16], b[sof + 19]], [0x52, 0x47, 0x42, 0x41])
 })
 
-test('reconstructs Type 1 (headerless XP) streams and decodes them to faithful RGB', () => {
-  const r = parseThumbsDb(buildType1Db())
+test('reconstructs abbrev-jpeg (headerless XP) streams and decodes them to faithful RGB', () => {
+  const r = parseThumbsDb(buildAbbrevJpegDb())
   assert.strictEqual(r.count, 2)
   assert.strictEqual(r.failed, 0)
   const e = r.entries.find((x) => x.index === 1)
   assert.ok(e)
   assert.strictEqual(e.name, 'PICT0001.JPG') // catalog name preserved
-  assert.strictEqual(e.payload.kind, 'cmyk') // reconstructed, not raw headerless JPEG passthrough
+  assert.strictEqual(e.payload.kind, 'abbrev-jpeg') // reconstructed, not raw headerless JPEG passthrough
   assert.strictEqual(e.width, 16) // dims read from the spliced SOF
   assert.strictEqual(e.height, 16)
-  if (e.payload.kind === 'cmyk') {
+  if (e.payload.kind === 'abbrev-jpeg') {
     // index 1 stores components [c0,c1,c2,c3] = [60,40,150,230]; the decoder maps R=c2, G=c1, B=c0 and
     // ignores the 4th, yielding a single uniform, non-degenerate color across the frame.
-    const { width, height, pixels } = decodeType1Rgb(e.payload.data)
+    const { width, height, pixels } = decodeAbbrevRgb(e.payload.data)
     assert.strictEqual(width, 16)
     assert.strictEqual(height, 16)
     assert.strictEqual(pixels.length, 16 * 16 * 3)

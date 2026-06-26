@@ -14,7 +14,7 @@ This project is licensed under **GPL-3.0-only** (see `LICENSE`). By submitting a
 
 1. **Inbound = outbound.** Your contribution is provided under the same license as the project, **GPL-3.0-only**.
 2. **Relicensing grant.** You also grant the project maintainer(s) a perpetual, worldwide, irrevocable, royalty-free right to **relicense your contribution under other terms** (including a commercial/proprietary license). This lets the project be dual-licensed or relicensed in the future without having to track down every contributor. You keep the copyright to your contribution.
-3. **Developer Certificate of Origin (DCO).** You certify the [DCO 1.1](https://developercertificate.org/) — i.e. you wrote the contribution or otherwise have the right to submit it under the above terms. Sign off each commit with:
+3. **Developer Certificate of Origin (DCO).** You certify the [DCO 1.1](https://developercertificate.org/) - i.e. you wrote the contribution or otherwise have the right to submit it under the above terms. Sign off each commit with:
 
    ```
    git commit -s
@@ -26,4 +26,4 @@ If you cannot agree to the relicensing grant, please open an issue to discuss be
 
 ## Privacy (public repository)
 
-This is a public repo. **Never include real local filesystem paths, IP addresses, personal names, or other personal/location-revealing data** in code, docs, comments, fixtures, or commit messages — use neutral placeholders (`<corpus>`, `/path/to/sample`, `192.0.2.0`, `Example User`). Real sample `Thumbs.db`-family files contain personal photos and must never be committed; keep them in the gitignored `tests/fixtures/real/`. Review your diff before opening a PR. See the privacy rule in `CLAUDE.md` for the full policy.
+This is a public repo. **Never include real local filesystem paths, IP addresses, personal names, or other personal/location-revealing data** in code, docs, comments, fixtures, or commit messages - use neutral placeholders (`<corpus>`, `/path/to/sample`, `192.0.2.0`, `Example User`). Real sample `Thumbs.db`-family files contain personal photos and must never be committed; keep them in the gitignored `tests/fixtures/real/`. Review your diff before opening a PR. See the privacy rule in `CLAUDE.md` for the full policy.

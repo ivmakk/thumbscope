@@ -3,26 +3,26 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import sharp from 'sharp'
-import { encodeJpeg, renderCmyk } from './encode.ts'
+import { encodeJpeg, renderAbbrevJpeg } from './encode.ts'
 import { parseThumbsDb } from './parser.ts'
-import { decodeType1Rgb } from './jpegType1.ts'
-import { buildType1Db } from './fixture.ts'
+import { decodeAbbrevRgb } from './jpegAbbrev.ts'
+import { buildAbbrevJpegDb } from './fixture.ts'
 import type { Payload } from './types.ts'
 
 const root = join(import.meta.dirname, '..', '..')
 
-// The cmyk payload (reconstructed Type 1 JPEG) the parser produces for index 1 (q = [60,40,150,230]).
+// The abbrev-jpeg payload (reconstructed abbrev-jpeg JPEG) the parser produces for index 1 (q = [60,40,150,230]).
 function cmykPayload(): { payload: Payload; width: number; height: number } {
-  const r = parseThumbsDb(buildType1Db())
+  const r = parseThumbsDb(buildAbbrevJpegDb())
   const e = r.entries.find((x) => x.index === 1)
-  assert.ok(e && e.payload.kind === 'cmyk')
+  assert.ok(e && e.payload.kind === 'abbrev-jpeg')
   return { payload: e.payload, width: e.width as number, height: e.height as number }
 }
 
-test('renderCmyk returns a PNG of the source dimensions with the decoded color', async () => {
+test('renderAbbrevJpeg returns a PNG of the source dimensions with the decoded color', async () => {
   const { payload } = cmykPayload()
-  assert.ok(payload.kind === 'cmyk')
-  const png = await renderCmyk(payload.data)
+  assert.ok(payload.kind === 'abbrev-jpeg')
+  const png = await renderAbbrevJpeg(payload.data)
   const meta = await sharp(png).metadata()
   assert.strictEqual(meta.format, 'png')
   assert.strictEqual(meta.width, 16)
@@ -34,7 +34,7 @@ test('renderCmyk returns a PNG of the source dimensions with the decoded color',
   assert.ok(Math.abs(data[2] - 60) <= 2, 'B')
 })
 
-test('encodeJpeg on a cmyk payload returns a valid JPEG at original size', async () => {
+test('encodeJpeg on a abbrev-jpeg payload returns a valid JPEG at original size', async () => {
   const { payload, width, height } = cmykPayload()
   const jpeg = await encodeJpeg(payload, width, height, 'original', 85)
   assert.strictEqual(jpeg[0], 0xff)
@@ -45,7 +45,7 @@ test('encodeJpeg on a cmyk payload returns a valid JPEG at original size', async
   assert.strictEqual(meta.height, 16)
 })
 
-test('encodeJpeg on a cmyk payload upscales to 800px on the longer side', async () => {
+test('encodeJpeg on a abbrev-jpeg payload upscales to 800px on the longer side', async () => {
   const { payload, width, height } = cmykPayload()
   const jpeg = await encodeJpeg(payload, width, height, 'upscale800', 85)
   const meta = await sharp(jpeg).metadata()
@@ -55,17 +55,17 @@ test('encodeJpeg on a cmyk payload upscales to 800px on the longer side', async 
 })
 
 // End-to-end against the committed photo sample built by `make-sample-thumbsdb.mjs --winxp`: it must
-// parse as all-Type 1 and each thumbnail must decode back to colors close to its source photo.
-test('the committed Thumbs-winxp.db sample parses as Type 1 and decodes faithfully', async () => {
+// parse as all-abbrev-jpeg and each thumbnail must decode back to colors close to its source photo.
+test('the committed Thumbs-winxp.db sample parses as abbrev-jpeg and decodes faithfully', async () => {
   const r = parseThumbsDb(readFileSync(join(root, 'sample', 'Thumbs-winxp.db')))
   assert.ok(r.count >= 1)
   assert.strictEqual(r.failed, 0)
   assert.strictEqual(r.recovered, false)
-  assert.ok(r.entries.every((e) => e.payload.kind === 'cmyk'), 'every entry is a reconstructed Type 1 payload')
+  assert.ok(r.entries.every((e) => e.payload.kind === 'abbrev-jpeg'), 'every entry is a reconstructed abbrev-jpeg payload')
 
   const e = r.entries[0]
-  assert.ok(e.payload.kind === 'cmyk' && e.name)
-  const dec = decodeType1Rgb((e.payload as { data: Buffer }).data)
+  assert.ok(e.payload.kind === 'abbrev-jpeg' && e.name)
+  const dec = decodeAbbrevRgb((e.payload as { data: Buffer }).data)
   assert.strictEqual(dec.width, e.width)
   assert.strictEqual(dec.height, e.height)
   assert.strictEqual(dec.pixels.length, dec.width * dec.height * 3)

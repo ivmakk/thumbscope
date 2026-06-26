@@ -1,6 +1,6 @@
 ## Description
 
-<!-- What this PR does and why, in 1–3 sentences. Synthesize — don't paste the issue verbatim. -->
+<!-- What this PR does and why, in 1–3 sentences. Synthesize - don't paste the issue verbatim. -->
 
 ## Related issue
 

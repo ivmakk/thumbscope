@@ -2,18 +2,18 @@
 // dates, UTF-16LE names, digit-reversed stream names). Three modes:
 //   default  — ~100 distinct synthetic colored-gradient JPEG thumbnails (no source files needed).
 //   --real   — classic JPEG thumbnails resized from the CC0/PD photo pack in sample/images/ (one per image).
-//   --winxp  — the same photo pack encoded as Windows XP "Type 1" thumbnails (abbreviated 4-component
-//              R,G,B,A CMYK JPEGs, no DQT/DHT), to exercise the Type 1 decode path end-to-end.
+//   --winxp  — the same photo pack encoded as Windows XP "abbrev-jpeg" thumbnails (abbreviated 4-component
+//              R,G,B,A CMYK JPEGs, no DQT/DHT), to exercise the abbrev-jpeg decode path end-to-end.
 // No personal data either way. Usage:
 //   node scripts/make-sample-thumbsdb.mjs [outPath] [count]          # synthetic
 //   node scripts/make-sample-thumbsdb.mjs --real [outPath]           # real photos, classic JPEG
-//   node scripts/make-sample-thumbsdb.mjs --winxp [outPath]          # real photos, XP Type 1
+//   node scripts/make-sample-thumbsdb.mjs --winxp [outPath]          # real photos, XP abbrev-jpeg
 
 import { writeFile, readdir, mkdir } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import CFB from 'cfb'
 import sharp from 'sharp'
-import { encodeType1 } from './lib/encode-type1.mjs'
+import { encodeAbbrevJpeg } from './lib/encode-abbrev.mjs'
 
 const rawArgs = process.argv.slice(2)
 const KNOWN_FLAGS = ['--real', '--winxp']
@@ -63,15 +63,15 @@ async function makeRealJpeg(src, w, h) {
   return sharp(src).resize(w, h, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 82 }).toBuffer()
 }
 
-// Resize a real source photo and encode it as an abbreviated XP Type 1 stream (4-component R,G,B,A,
-// no DQT/DHT). The parser reconstructs the tables and decodeType1Rgb renders it back to faithful RGB.
+// Resize a real source photo and encode it as an abbreviated XP abbrev-jpeg stream (4-component R,G,B,A,
+// no DQT/DHT). The parser reconstructs the tables and decodeAbbrevRgb renders it back to faithful RGB.
 async function makeWinxpStream(src, w, h) {
   const { data, info } = await sharp(src)
     .resize(w, h, { fit: 'inside', withoutEnlargement: true })
     .removeAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true })
-  return encodeType1(data, info.width, info.height)
+  return encodeAbbrevJpeg(data, info.width, info.height)
 }
 
 // Read the CC0/PD pack (sample/images/IMG_NNNN.JPG) in deterministic sorted order.

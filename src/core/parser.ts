@@ -43,7 +43,7 @@ function streamNameToIndex(name: string): number | null {
   return parseInt(m.split('').reverse().join(''), 10)
 }
 
-// Catalog "names" are sometimes GUIDs (variant B); treat those as no real name.
+// Catalog "names" are sometimes GUIDs (catalog-jpeg-guid); treat those as no real name.
 function realName(name: string | undefined): string | null {
   if (!name || GUID.test(name)) return null
   return name
@@ -93,11 +93,11 @@ function jpegDimensions(buf: Buffer): { width: number; height: number } | null {
   return null
 }
 
-// Windows XP "Type 1" thumbnail: a JPEG whose tables the OS supplies implicitly, so the stream holds
+// Windows XP "abbrev-jpeg" thumbnail: a JPEG whose tables the OS supplies implicitly, so the stream holds
 // only SOI + SOF0 + scan. The frame has four components tagged 'R','G','B','A' (52 47 42 41) but the
 // pixels are an out-of-order CMYK separation. Detect by that exact component signature: a 4-component
 // SOF whose IDs are R,G,B,A — distinct from real CMYK JPEGs (which tag components 1..4 or C,M,Y,K).
-function isType1Jpeg(buf: Buffer): boolean {
+function isAbbrevJpeg(buf: Buffer): boolean {
   let i = 2 // skip SOI
   while (i + 19 < buf.length) {
     if (buf[i] !== 0xff) {
@@ -109,8 +109,8 @@ function isType1Jpeg(buf: Buffer): boolean {
       i += 2
       continue
     }
-    // A true Type 1 stream is headerless — the OS supplies tables implicitly. A DQT/DHT before the SOF
-    // means this is a full 4-component JPEG carrying its own tables, not a Type 1 stream: leave it for
+    // A true abbrev-jpeg stream is headerless — the OS supplies tables implicitly. A DQT/DHT before the SOF
+    // means this is a full 4-component JPEG carrying its own tables, not a abbrev-jpeg stream: leave it for
     // the plain-jpeg path rather than mis-splicing the standard tables over its real ones.
     if (marker === 0xdb || marker === 0xc4) return false
     if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
@@ -125,32 +125,32 @@ function isType1Jpeg(buf: Buffer): boolean {
   return false
 }
 
-// Standard JPEG blocks Windows omits from a Type 1 stream and the OS supplies implicitly. Splicing
+// Standard JPEG blocks Windows omits from a abbrev-jpeg stream and the OS supplies implicitly. Splicing
 // these around the stream's own SOF + scan yields a decodable JPEG. SOI + APP0(JFIF); the two
 // quantization tables (luminance id 0 + chrominance id 1) — table 0 carries the true Windows values,
 // referenced by every component, so its contents determine the tone; and the standard Annex-K Huffman
 // tables (DC + AC, table 0). The four components are decoded as raw samples and mapped to RGB in
 // reversed channel order (R=c2, G=c1, B=c0, no complement; the 4th/K component ignored) by
-// decodeType1Rgb — no Adobe APP14 is needed. The stored image is
+// decodeAbbrevRgb — no Adobe APP14 is needed. The stored image is
 // bottom-up, so the decoder flips vertically. Tables match the reference tool thumbsviewer; the
 // standard JPEG (Annex-K) tables are not copyrightable. Confirmed against real XP samples.
-const TYPE1_SOI_APP0 = Buffer.from('ffd8ffe000104a46494600010101006000600000', 'hex')
-const TYPE1_DQT = Buffer.from(
+const ABBREV_SOI_APP0 = Buffer.from('ffd8ffe000104a46494600010101006000600000', 'hex')
+const ABBREV_DQT = Buffer.from(
   'ffdb004300080606070605080707070909080a0c140d0c0b0b0c1912130f141d1a1f1e1d1a1c1c20242e2720222c231c1c2837292c30313434341f27393d38323c2e333432ffdb0043010909090c0b0c180d0d1832211c213232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232',
   'hex'
 )
-const TYPE1_HUFFMAN = Buffer.from(
+const ABBREV_HUFFMAN = Buffer.from(
   'ffc4001f0000010501010101010100000000000000000102030405060708090a0bffc400b5100002010303020403050504040000017d01020300041105122131410613516107227114328191a1082342b1c11552d1f02433627282090a161718191a25262728292a3435363738393a434445464748494a535455565758595a636465666768696a737475767778797a838485868788898a92939495969798999aa2a3a4a5a6a7a8a9aab2b3b4b5b6b7b8b9bac2c3c4c5c6c7c8c9cad2d3d4d5d6d7d8d9dae1e2e3e4e5e6e7e8e9eaf1f2f3f4f5f6f7f8f9fa',
   'hex'
 )
 
-// Reconstruct a decodable JPEG from a Type 1 stream by splicing the standard tables around its own
+// Reconstruct a decodable JPEG from a abbrev-jpeg stream by splicing the standard tables around its own
 // SOF + scan: SOI+APP0 | DQT | SOF | HUFFMAN | scan. Cheap (a few buffer slices, no pixel work) so it
-// runs at parse time; decodeType1Rgb does the actual decode lazily on display/export. Returns null if
+// runs at parse time; decodeAbbrevRgb does the actual decode lazily on display/export. Returns null if
 // the stream is malformed.
-function reconstructType1(jpg: Buffer): Buffer | null {
+function reconstructAbbrevJpeg(jpg: Buffer): Buffer | null {
   // Locate the SOF marker by walking the marker chain (the stream is SOI + [maybe segments] + SOF +
-  // SOS + entropy). Don't assume the SOF sits immediately after SOI — isType1Jpeg walks it the same way.
+  // SOS + entropy). Don't assume the SOF sits immediately after SOI — isAbbrevJpeg walks it the same way.
   let i = 2 // skip SOI (sliceJpeg guarantees the buffer starts FF D8 FF)
   let frameIdx = -1
   while (i + 4 <= jpg.length) {
@@ -176,10 +176,10 @@ function reconstructType1(jpg: Buffer): Buffer | null {
   const scanIdx = frameIdx + 2 + frameSize
   if (scanIdx > jpg.length) return null
   return Buffer.concat([
-    TYPE1_SOI_APP0,
-    TYPE1_DQT,
+    ABBREV_SOI_APP0,
+    ABBREV_DQT,
     jpg.subarray(frameIdx, scanIdx),
-    TYPE1_HUFFMAN,
+    ABBREV_HUFFMAN,
     jpg.subarray(scanIdx)
   ])
 }
@@ -256,17 +256,17 @@ function parseBmp(buf: Buffer): { width: number; height: number; pixels: Buffer 
   return { width, height, pixels: out }
 }
 
-// Route a stream's bytes to a payload by signature. DIB first (strict header), then JPEG. A Type 1
-// JPEG (headerless XP CMYK) is reconstructed into a `cmyk` payload that decodeType1Rgb later renders
+// Route a stream's bytes to a payload by signature. DIB first (strict header), then JPEG. A abbrev-jpeg
+// JPEG (headerless XP CMYK) is reconstructed into a `abbrev-jpeg` payload that decodeAbbrevRgb later renders
 // to RGB; on reconstruction failure it falls back to the raw bytes so the entry still lists.
 function classify(content: Buffer): Payload | null {
   const dib = parseDib(content)
   if (dib) return { kind: 'dib', width: dib.width, height: dib.height, pixels: dib.pixels }
   const jpeg = sliceJpeg(content)
   if (jpeg) {
-    if (isType1Jpeg(jpeg)) {
-      const recon = reconstructType1(jpeg)
-      if (recon) return { kind: 'cmyk', data: recon }
+    if (isAbbrevJpeg(jpeg)) {
+      const recon = reconstructAbbrevJpeg(jpeg)
+      if (recon) return { kind: 'abbrev-jpeg', data: recon }
     }
     return { kind: 'jpeg', data: jpeg }
   }

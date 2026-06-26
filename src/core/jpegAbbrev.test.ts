@@ -1,21 +1,21 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { decodeType1Rgb } from './jpegType1.ts'
+import { decodeAbbrevRgb } from './jpegAbbrev.ts'
 import { parseThumbsDb } from './parser.ts'
-import { buildType1Db } from './fixture.ts'
+import { buildAbbrevJpegDb } from './fixture.ts'
 
-// Pull the reconstructed (SOI+APP0 | DQT | SOF | DHT | scan) bytes the parser produces for a Type 1
-// stream — that is the only input decodeType1Rgb is ever given.
+// Pull the reconstructed (SOI+APP0 | DQT | SOF | DHT | scan) bytes the parser produces for a abbrev-jpeg
+// stream — that is the only input decodeAbbrevRgb is ever given.
 function recon(index: number): Buffer {
-  const r = parseThumbsDb(buildType1Db())
+  const r = parseThumbsDb(buildAbbrevJpegDb())
   const e = r.entries.find((x) => x.index === index)
-  assert.ok(e && e.payload.kind === 'cmyk')
+  assert.ok(e && e.payload.kind === 'abbrev-jpeg')
   return (e.payload as { data: Buffer }).data
 }
 
-test('decodes a solid Type 1 stream to upright RGB with R=c2, G=c1, B=c0', () => {
-  // buildType1Db index 1 stores components q = [c0, c1, c2, c3] = [60, 40, 150, 230]; the 4th is ignored.
-  const { width, height, pixels } = decodeType1Rgb(recon(1))
+test('decodes a solid abbrev-jpeg stream to upright RGB with R=c2, G=c1, B=c0', () => {
+  // buildAbbrevJpegDb index 1 stores components q = [c0, c1, c2, c3] = [60, 40, 150, 230]; the 4th is ignored.
+  const { width, height, pixels } = decodeAbbrevRgb(recon(1))
   assert.strictEqual(width, 16)
   assert.strictEqual(height, 16)
   assert.strictEqual(pixels.length, 16 * 16 * 3)
@@ -26,9 +26,9 @@ test('decodes a solid Type 1 stream to upright RGB with R=c2, G=c1, B=c0', () =>
   }
 })
 
-test('decodes a second solid Type 1 stream to its expected color', () => {
+test('decodes a second solid abbrev-jpeg stream to its expected color', () => {
   // index 2 stores q = [c0, c1, c2, c3] = [200, 180, 90, 240] -> R=90, G=180, B=200.
-  const { pixels } = decodeType1Rgb(recon(2))
+  const { pixels } = decodeAbbrevRgb(recon(2))
   assert.ok(Math.abs(pixels[0] - 90) <= 1)
   assert.ok(Math.abs(pixels[1] - 180) <= 1)
   assert.ok(Math.abs(pixels[2] - 200) <= 1)
@@ -45,12 +45,12 @@ test('throws on a subsampled frame so the caller falls back to listing-only', ()
   const sof = findSof(b)
   // From the 0xff marker: first component sampling byte is at +11 (id@+10). Set it to 2x2.
   b[sof + 11] = 0x22
-  assert.throws(() => decodeType1Rgb(b), /subsampling/)
+  assert.throws(() => decodeAbbrevRgb(b), /subsampling/)
 })
 
 test('throws on a non-baseline (progressive) frame', () => {
   const b = Buffer.from(recon(1))
   const sof = findSof(b)
   b[sof + 1] = 0xc2 // SOF0 -> SOF2 (progressive); decoder never records a frame
-  assert.throws(() => decodeType1Rgb(b), /missing frame/)
+  assert.throws(() => decodeAbbrevRgb(b), /missing frame/)
 })

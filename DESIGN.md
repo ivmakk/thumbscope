@@ -1,8 +1,8 @@
 # Design
 
-Living design rules for the Thumbscope desktop app. Accumulate decisions here as the UI evolves — this is the canonical reference; add to it when a new pattern or rule is established.
+Living design rules for the Thumbscope desktop app. Accumulate decisions here as the UI evolves - this is the canonical reference; add to it when a new pattern or rule is established.
 
-Adapted from a Notion design-language analysis (marketing-site oriented) — its *principles* are adopted; its marketing inventory (hero bands, pricing tiers, pill CTAs, sticker palette, display headlines, footer directories) is **not**, because this is a compact desktop utility, not a website.
+Adapted from a Notion design-language analysis (marketing-site oriented) - its *principles* are adopted; its marketing inventory (hero bands, pricing tiers, pill CTAs, sticker palette, display headlines, footer directories) is **not**, because this is a compact desktop utility, not a website.
 
 Implementation lives in `src/renderer/src/index.css` (oklch tokens + Tailwind v4 `@theme inline`). shadcn primitives are vendored in `src/renderer/src/components/ui/`. This doc is the intent; the CSS is the source of truth for exact values.
 
@@ -16,14 +16,14 @@ Implementation lives in `src/renderer/src/index.css` (oklch tokens + Tailwind v4
 
 ## Principles dropped (don't apply here)
 
-- No structural accent color — the app is intentionally **monochrome**. (A single blue could be added later for primary actions if desired; deliberately not adopted now.)
+- No structural accent color - the app is intentionally **monochrome**. (A single blue could be added later for primary actions if desired; deliberately not adopted now.)
 - No pill (`rounded-full`) buttons, no display/hero typography, no multi-color "sticker" palette, no marketing components (hero/pricing/footer).
 
 ## Tokens
 
 ### Color (oklch, neutral)
 
-Two surface levels per mode — a canvas plus an elevated chrome surface — mirrored across light/dark.
+Two surface levels per mode - a canvas plus an elevated chrome surface - mirrored across light/dark.
 
 | Role | Light | Dark | Use |
 |---|---|---|---|
@@ -34,14 +34,14 @@ Two surface levels per mode — a canvas plus an elevated chrome surface — mir
 | `--accent` / `--accent-foreground` | `0.97 0 0` / `0.205 0 0` | `0.3 0 0` / `0.985 0 0` | Hover/active surface for menu + toggle items |
 | `--border` / `--input` | `0.922 0 0` | `1 0 0 / 12%` / `1 0 0 / 15%` | Hairlines, field outlines |
 | `--ring` | `0.708 0 0` | `0.556 0 0` | Focus ring |
-| `--primary` | `0.205 0 0` (near-black) | `0.985 0 0` (near-white) | Default button fill — neutral, not an accent hue |
+| `--primary` | `0.205 0 0` (near-black) | `0.985 0 0` (near-white) | Default button fill - neutral, not an accent hue |
 
 The warm canvas is the one chromatic touch (light mode only, ~`0.004` chroma at hue 85). Dark mode stays neutral grey. The Notion rule "page on warm canvas, cards on white" maps directly to our `--background` / `--card` split.
 
 ### Typography
 
-- **Family:** `Inter Variable` (self-hosted via `@fontsource-variable/inter`, imported in `src/renderer/src/main.tsx` — Google Fonts CDN is blocked by the renderer CSP), falling back to the system sans stack. Set as `--font-sans` and applied on `body`.
-- **Hierarchy:** this is a dense utility — most text is small. Body/controls ~13–14px (`text-sm`), metadata ~12px (`text-xs`), no headings larger than the empty-state hint. Apply Inter's negative tracking only if larger text is ever introduced.
+- **Family:** `Inter Variable` (self-hosted via `@fontsource-variable/inter`, imported in `src/renderer/src/main.tsx` - Google Fonts CDN is blocked by the renderer CSP), falling back to the system sans stack. Set as `--font-sans` and applied on `body`.
+- **Hierarchy:** this is a dense utility - most text is small. Body/controls ~13–14px (`text-sm`), metadata ~12px (`text-xs`), no headings larger than the empty-state hint. Apply Inter's negative tracking only if larger text is ever introduced.
 
 ### Spacing & radius
 
@@ -50,8 +50,8 @@ The warm canvas is the one chromatic touch (light mode only, ~`0.004` chroma at 
 
 ### Elevation
 
-- **Level 0 (default):** hairline `--border`, no shadow — grid tiles, panels.
-- **Level 1 (raised):** hairline + soft `shadow-md` — menubar dropdowns, dialogs.
+- **Level 0 (default):** hairline `--border`, no shadow - grid tiles, panels.
+- **Level 1 (raised):** hairline + soft `shadow-md` - menubar dropdowns, dialogs.
 
 Keep shadows soft and layered; the hairline does most of the separation work.
 
@@ -60,11 +60,11 @@ Keep shadows soft and layered; the hairline does most of the separation work.
 - **Menubar** (`src/renderer/src/components/MenuBar.tsx` + `ui/menubar.tsx`): `bg-card`, `rounded-sm` items, tight padding; hover/active via `--accent`. Custom in-renderer bar replaces the native Win32 menu (which can't match this look).
 - **Header / toolbar** (`src/renderer/src/App.tsx`): `bg-card` strip on the canvas; controls hidden until a file is open (empty state shows only **Open…** + logo hint).
 - **Grid tiles** (`src/renderer/src/components/BrowseGrid.tsx`): white/`bg-card` cards on the canvas, fixed equal height, hairline border, `--ring` for the previewed item.
-- **Orphan indicator**: thumbnails whose original file is missing from the source folder (recoverable) get a small green (`emerald-500`) dot — top-right corner on grid tiles, after the name in the table (trailing, so names stay column-aligned) — plus a green `N recoverable` count folded inline into the grid status bar. Green = positive/opportunity (you can recover a deleted original), deliberately distinct from amber (warning, e.g. the corrupt-file recovery banner) and red (error). Clicking the count filters the panel to orphans only and shows a closable green badge in the toolbar (after the sort field); closing it restores the full view.
-- **Bottom status bars**: both panels end in a thin status bar (`border-t border-border px-3 py-1.5 text-xs text-muted-foreground`) — same height so they align across the resize handle. Left (grid) bar shows `count · failed · selected` with the thumbnail-size slider pushed to the right corner (grid view only); right (preview) bar shows the preview's label · dims · zoom%.
+- **Orphan indicator**: thumbnails whose original file is missing from the source folder (recoverable) get a small green (`emerald-500`) dot - top-right corner on grid tiles, after the name in the table (trailing, so names stay column-aligned) - plus a green `N recoverable` count folded inline into the grid status bar. Green = positive/opportunity (you can recover a deleted original), deliberately distinct from amber (warning, e.g. the corrupt-file recovery banner) and red (error). Clicking the count filters the panel to orphans only and shows a closable green badge in the toolbar (after the sort field); closing it restores the full view.
+- **Bottom status bars**: both panels end in a thin status bar (`border-t border-border px-3 py-1.5 text-xs text-muted-foreground`) - same height so they align across the resize handle. Left (grid) bar shows `count · failed · selected` with the thumbnail-size slider pushed to the right corner (grid view only); right (preview) bar shows the preview's label · dims · zoom%.
 - **Preview** (`src/renderer/src/components/Preview.tsx`): top-to-bottom order is image well → compact control bar → info status bar. Image well uses a theme-independent tint (`bg-foreground/[0.04]`); control buttons are compact (`h-7 px-2`); Fit and 1:1 show the `default` (filled) variant when active, `outline` otherwise.
 - **Dialogs / inputs / buttons** (`ui/`): `bg-card` surfaces, hairline borders, neutral `--primary` fill for default buttons, `outline` variant for secondary actions.
-- **Notices / errors**: status feedback is the one place color is allowed, and only as a small accent — the surface stays neutral. *Error* = red (the dismissable toast: `red-500/10` fill + `/30` border, `TriangleAlert` icon; raw cause behind a dotted-underline "details" tooltip). *Warning* (e.g. the corrupt-file recovery banner) = amber-tinted bar (`amber-500/10` fill + `/30` border, `amber-700` / dark `amber-300` text, `TriangleAlert` icon), mirroring the error toast's red. Always a lucide icon, never a system emoji.
+- **Notices / errors**: status feedback is the one place color is allowed, and only as a small accent - the surface stays neutral. *Error* = red (the dismissable toast: `red-500/10` fill + `/30` border, `TriangleAlert` icon; raw cause behind a dotted-underline "details" tooltip). *Warning* (e.g. the corrupt-file recovery banner) = amber-tinted bar (`amber-500/10` fill + `/30` border, `amber-700` / dark `amber-300` text, `TriangleAlert` icon), mirroring the error toast's red. Always a lucide icon, never a system emoji.
 
 ## Theme switching
 

@@ -2,7 +2,7 @@
 
 ## Synthetic (committed)
 
-Deterministic, privacy-safe fixtures generated in code are the primary test inputs. The generator (`fixture.js`, ported from `spikes/poc/test/fixture.js` in phase 2) builds valid CFB Thumbs.db buffers in memory — no binary files committed. Use these for all unit tests.
+Deterministic, privacy-safe fixtures generated in code are the primary test inputs. The generator (`fixture.js`, ported from `spikes/poc/test/fixture.js` in phase 2) builds valid CFB Thumbs.db buffers in memory - no binary files committed. Use these for all unit tests.
 
 ## Real samples (local only, NOT committed)
 

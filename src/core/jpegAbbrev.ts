@@ -1,4 +1,4 @@
-// Baseline (SOF0) JPEG decoder that returns raw component samples, used only for Windows XP "Type 1"
+// Baseline (SOF0) JPEG decoder that returns raw component samples, used only for Windows XP "abbrev-jpeg"
 // thumbnails. These are abbreviated 4-component JPEGs whose pixels are RGB stored in reversed channel
 // order with an unused 4th plane; the correct rendering (matching the reference thumbsviewer tool) is a
 // plain reversed copy of the first three components — R=c2, G=c1, B=c0, no complement — with the fourth
@@ -138,9 +138,9 @@ interface Component {
   tq: number
 }
 
-// Decode a Type 1 reconstructed JPEG to upright, tightly-packed top-down RGB. Throws on anything
+// Decode a abbrev-jpeg reconstructed JPEG to upright, tightly-packed top-down RGB. Throws on anything
 // outside the expected baseline / 1x1-sampling shape so the caller can fall back.
-export function decodeType1Rgb(jpeg: Buffer): { width: number; height: number; pixels: Buffer } {
+export function decodeAbbrevRgb(jpeg: Buffer): { width: number; height: number; pixels: Buffer } {
   const data = jpeg
   const qt: Record<number, Int32Array> = {}
   const hdc: Record<number, Huff> = {}
@@ -161,7 +161,7 @@ export function decodeType1Rgb(jpeg: Buffer): { width: number; height: number; p
     const len = (data[i] << 8) | data[i + 1]
     const seg = i + 2
     const segEnd = i + len
-    if (len < 2 || segEnd > data.length) throw new Error('Type 1 decode: segment length exceeds buffer')
+    if (len < 2 || segEnd > data.length) throw new Error('abbrev-jpeg decode: segment length exceeds buffer')
     if (marker === 0xdb) {
       // DQT (may carry multiple tables)
       let p = seg
@@ -177,8 +177,8 @@ export function decodeType1Rgb(jpeg: Buffer): { width: number; height: number; p
         qt[tq] = t
       }
     } else if (marker === 0xc0) {
-      // SOF0 baseline, 8-bit only (Type 1 streams are always this shape)
-      if (data[seg] !== 8) throw new Error('Type 1 decode: only 8-bit sample precision supported')
+      // SOF0 baseline, 8-bit only (abbrev-jpeg streams are always this shape)
+      if (data[seg] !== 8) throw new Error('abbrev-jpeg decode: only 8-bit sample precision supported')
       const h = (data[seg + 1] << 8) | data[seg + 2]
       const w = (data[seg + 3] << 8) | data[seg + 4]
       const nc = data[seg + 5]
@@ -225,11 +225,11 @@ export function decodeType1Rgb(jpeg: Buffer): { width: number; height: number; p
     i = segEnd
   }
 
-  if (!frame || !scan) throw new Error('Type 1 decode: missing frame or scan')
+  if (!frame || !scan) throw new Error('abbrev-jpeg decode: missing frame or scan')
   const { w, h, comps } = frame
-  if (w <= 0 || h <= 0 || w > 20000 || h > 20000) throw new Error('Type 1 decode: bad dimensions')
-  if (comps.some((c) => c.hi !== 1 || c.vi !== 1)) throw new Error('Type 1 decode: subsampling unsupported')
-  if (comps.length < 3) throw new Error('Type 1 decode: need at least 3 components')
+  if (w <= 0 || h <= 0 || w > 20000 || h > 20000) throw new Error('abbrev-jpeg decode: bad dimensions')
+  if (comps.some((c) => c.hi !== 1 || c.vi !== 1)) throw new Error('abbrev-jpeg decode: subsampling unsupported')
+  if (comps.length < 3) throw new Error('abbrev-jpeg decode: need at least 3 components')
 
   const planes = comps.map(() => new Uint8Array(w * h))
   const order = scan.sel.map((s) => comps.findIndex((c) => c.id === s.id))
@@ -244,13 +244,13 @@ export function decodeType1Rgb(jpeg: Buffer): { width: number; height: number; p
     for (let mx = 0; mx < mcuCols; mx++) {
       for (let n = 0; n < scan.sel.length; n++) {
         const ci = order[n]
-        if (ci < 0) throw new Error('Type 1 decode: scan component not in frame')
+        if (ci < 0) throw new Error('abbrev-jpeg decode: scan component not in frame')
         const sel = scan.sel[n]
         const comp = comps[ci]
         const dcTable = hdc[sel.td]
         const acTable = hac[sel.ta]
         const q = qt[comp.tq]
-        if (!dcTable || !acTable || !q) throw new Error('Type 1 decode: missing table')
+        if (!dcTable || !acTable || !q) throw new Error('abbrev-jpeg decode: missing table')
         coef.fill(0)
         const t = br.decode(dcTable)
         const diff = t ? extend(br.bits(t), t) : 0

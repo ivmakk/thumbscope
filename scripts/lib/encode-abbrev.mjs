@@ -1,18 +1,18 @@
-// Baseline JPEG encoder that produces a Windows XP "Type 1" thumbnail stream — the inverse of
-// src/core/jpegType1.ts. Used only by the sample generator (scripts/make-sample-thumbsdb.mjs) to
+// Baseline JPEG encoder that produces a Windows XP "abbrev-jpeg" thumbnail stream — the inverse of
+// src/core/jpegAbbrev.ts. Used only by the sample generator (scripts/make-sample-thumbsdb.mjs) to
 // build a committed, photo-realistic sample/Thumbs-winxp.db; it is not part of the shipped app.
 //
 // Output shape matches a real XP stream: SOI + SOF0 (four components tagged R,G,B,A, all 1x1, all
 // referencing quant table 0) + SOS + entropy + EOI, with NO DQT and NO DHT segments (Windows omits
-// them; the parser's reconstructType1 re-adds the exact same tables). So an image encoded here
-// round-trips back through decodeType1Rgb.
+// them; the parser's reconstructAbbrevJpeg re-adds the exact same tables). So an image encoded here
+// round-trips back through decodeAbbrevRgb.
 //
 // Colour is the inverse of the decoder's transform (decode maps R=c2, G=c1, B=c0): per pixel
 // component0=B, component1=G, component2=R (raw, no complement), and the 4th component is a constant 0
 // (the decoder ignores it). The image is stored bottom-up (the decoder flips vertically), so JPEG
 // raster row y holds source row (h-1-y).
 //
-// The quant + Huffman tables below mirror TYPE1_DQT / TYPE1_HUFFMAN in src/core/parser.ts (standard
+// The quant + Huffman tables below mirror ABBREV_DQT / ABBREV_HUFFMAN in src/core/parser.ts (standard
 // JPEG Annex-K tables — not copyrightable); they are duplicated so this script stays self-contained.
 
 const ZIGZAG = [
@@ -34,14 +34,14 @@ const M = (() => {
   return m
 })()
 
-const TYPE1_DQT_HEX =
+const ABBREV_DQT_HEX =
   'ffdb004300080606070605080707070909080a0c140d0c0b0b0c1912130f141d1a1f1e1d1a1c1c20242e2720222c231c1c2837292c30313434341f27393d38323c2e333432ffdb0043010909090c0b0c180d0d1832211c213232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232'
-const TYPE1_HUFFMAN_HEX =
+const ABBREV_HUFFMAN_HEX =
   'ffc4001f0000010501010101010100000000000000000102030405060708090a0bffc400b5100002010303020403050504040000017d01020300041105122131410613516107227114328191a1082342b1c11552d1f02433627282090a161718191a25262728292a3435363738393a434445464748494a535455565758595a636465666768696a737475767778797a838485868788898a92939495969798999aa2a3a4a5a6a7a8a9aab2b3b4b5b6b7b8b9bac2c3c4c5c6c7c8c9cad2d3d4d5d6d7d8d9dae1e2e3e4e5e6e7e8e9eaf1f2f3f4f5f6f7f8f9fa'
 
 // Quant table 0 in natural (raster) order, un-zig-zagged from the DQT segment the parser re-adds.
 const QT = (() => {
-  const b = Buffer.from(TYPE1_DQT_HEX, 'hex')
+  const b = Buffer.from(ABBREV_DQT_HEX, 'hex')
   // first table: skip FF DB len(2) Pq/Tq(1) = 5 bytes, then 64 zig-zag values
   const zz = b.subarray(5, 5 + 64)
   const t = new Float64Array(64)
@@ -52,7 +52,7 @@ const QT = (() => {
 // Build symbol -> {code, len} encode maps for the DC (tc 0) and AC (tc 1) luminance tables from the
 // shared DHT blob, using the canonical (counts-per-length + symbols) Huffman code assignment.
 function buildEncodeTables() {
-  const b = Buffer.from(TYPE1_HUFFMAN_HEX, 'hex')
+  const b = Buffer.from(ABBREV_HUFFMAN_HEX, 'hex')
   const tables = { dc: new Map(), ac: new Map() }
   let i = 0
   while (i < b.length) {
@@ -190,8 +190,8 @@ function encodeBlock(bw, q, pred) {
   return q[0]
 }
 
-// Encode packed top-down RGB (w*h*3) into an abbreviated XP Type 1 thumbnail stream.
-export function encodeType1(rgb, w, h) {
+// Encode packed top-down RGB (w*h*3) into an abbreviated XP abbrev-jpeg thumbnail stream.
+export function encodeAbbrevJpeg(rgb, w, h) {
   const mcuCols = Math.ceil(w / 8)
   const mcuRows = Math.ceil(h / 8)
   // Four component planes: component0=B, component1=G, component2=R (raw), component3=0 (ignored on

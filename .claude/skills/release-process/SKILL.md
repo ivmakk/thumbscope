@@ -1,7 +1,7 @@
 ---
 name: release-process
 description: >
-  Use when cutting or shipping a Thumbscope release, or doing the post-release sync — i.e. the user
+  Use when cutting or shipping a Thumbscope release, or doing the post-release sync - i.e. the user
   says "release 1.1.0", "cut a release", "ship a version", "tag a release", "publish the build", "do
   a hotfix", "bump the version", or asks how the release/changelog/tagging flow works. Drives the
   GitFlow release process mapped onto this repo's tag-triggered CI: release branch → version bump +
@@ -12,7 +12,7 @@ argument-hint: "target version, e.g. 1.1.0 (or 'hotfix 1.1.1')"
 
 # Thumbscope Release Process
 
-GitFlow + this repo's CI. **Publishing is triggered by pushing a `v*` tag** — `.github/workflows/release.yml` then builds Windows + macOS (unsigned) and uploads them to a pre-created **draft** GitHub Release. The draft → published step is manual.
+GitFlow + this repo's CI. **Publishing is triggered by pushing a `v*` tag** - `.github/workflows/release.yml` then builds Windows + macOS (unsigned) and uploads them to a pre-created **draft** GitHub Release. The draft → published step is manual.
 
 This is a fragile, partly irreversible sequence (tags, merges, a public release). **Confirm with the user before the tag push and before each merge.** Don't run `git tag`/`git push`/`gh release`/merge steps without an explicit go-ahead.
 
@@ -33,9 +33,9 @@ Prereq: all intended feature/fix PRs already merged into `develop`, and `develop
    ```bash
    npm version <version> --no-git-tag-version
    ```
-   The version drives the artifact names (`thumbscope-<version>-arm64.dmg`, the Windows `…-setup.exe`), the app `--version`, and the NSIS upgrade-detect registry — so it must be bumped before tagging.
-3. **Update `CHANGELOG.md`** — add a `## [<version>] - <YYYY-MM-DD>` section (Added / Changed / Fixed). Convert relative dates to absolute.
-4. **Commit** (DCO sign-off + the repo's public identity — see Gotchas):
+   The version drives the artifact names (`thumbscope-<version>-arm64.dmg`, the Windows `…-setup.exe`), the app `--version`, and the NSIS upgrade-detect registry - so it must be bumped before tagging.
+3. **Update `CHANGELOG.md`** - add a `## [<version>] - <YYYY-MM-DD>` section (Added / Changed / Fixed). Convert relative dates to absolute.
+4. **Commit** (DCO sign-off + the repo's public identity - see Gotchas):
    ```bash
    git commit -s -m "chore(release): <version>"
    ```
@@ -61,8 +61,8 @@ Branch off `main` (not develop): `git switch main && git switch -c hotfix/<versi
 
 ## Unsigned-open notes (put in every Release body)
 
-- **macOS:** unsigned/un-notarized — first launch: right-click (Control-click) → **Open → Open**, or `xattr -dr com.apple.quarantine /Applications/Thumbscope.app`.
-- **Windows:** unsigned — SmartScreen may warn: **More info → Run anyway**.
+- **macOS:** unsigned/un-notarized - first launch: right-click (Control-click) → **Open → Open**, or `xattr -dr com.apple.quarantine /Applications/Thumbscope.app`.
+- **Windows:** unsigned - SmartScreen may warn: **More info → Run anyway**.
 
 (README §2 has the canonical wording to copy.)
 
@@ -70,8 +70,8 @@ Branch off `main` (not develop): `git switch main && git switch -c hotfix/<versi
 
 - **Tag → workflow + code is read from the tagged commit on `main`.** A feature must have reached `main` (develop → main) before its code/CI appears in a release. The first macOS release is the first tag cut after the macOS PR flows through.
 - **Tag must match `v*`** (e.g. `v1.1.0`). The draft release title is the tag name.
-- **Draft is pre-created in its own job + a `concurrency` guard serializes same-ref runs** — don't manually create a release for the same tag, and avoid re-pushing a tag mid-run (delete the draft first if you must re-run).
-- **DCO + identity:** sign every commit (`-s`) and use the repo's public no-reply identity `ivmakk <ivmakk@users.noreply.github.com>` — never a real/work email (public repo). If a commit landed with the wrong identity, rewrite with `git rebase <base> --exec 'git -c user.name="ivmakk" -c user.email="ivmakk@users.noreply.github.com" commit --amend --no-edit --reset-author --signoff'` then `git push --force-with-lease`.
+- **Draft is pre-created in its own job + a `concurrency` guard serializes same-ref runs** - don't manually create a release for the same tag, and avoid re-pushing a tag mid-run (delete the draft first if you must re-run).
+- **DCO + identity:** sign every commit (`-s`) and use the repo's public no-reply identity `ivmakk <ivmakk@users.noreply.github.com>` - never a real/work email (public repo). If a commit landed with the wrong identity, rewrite with `git rebase <base> --exec 'git -c user.name="ivmakk" -c user.email="ivmakk@users.noreply.github.com" commit --amend --no-edit --reset-author --signoff'` then `git push --force-with-lease`.
 - **`workflow_dispatch`** (manual build-only, artifacts no publish) is only selectable once `release.yml` is on the **default branch (`main`)**. After that it works for any branch.
-- **Don't bump version on develop directly** — it belongs on the release branch so the bump flows main→develop via the sync merge.
-- **`npm version` also writes a git tag by default** — always pass `--no-git-tag-version`; the real tag is created on `main` in step 7, not on the release branch.
+- **Don't bump version on develop directly** - it belongs on the release branch so the bump flows main→develop via the sync merge.
+- **`npm version` also writes a git tag by default** - always pass `--no-git-tag-version`; the real tag is created on `main` in step 7, not on the release branch.

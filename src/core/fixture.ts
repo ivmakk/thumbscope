@@ -9,7 +9,7 @@ export const TINY_JPEG = Buffer.from(
 type PayloadSpec =
   | { kind: 'jpeg'; prefix?: boolean; trailing?: boolean }
   | { kind: 'dib'; width: number; height: number; channels?: 3 | 4; bottomUp?: boolean }
-  | { kind: 'type1'; width: number; height: number; q: [number, number, number, number] }
+  | { kind: 'abbrev-jpeg'; width: number; height: number; q: [number, number, number, number] }
   | { kind: 'garbage' }
 
 interface FixtureItem {
@@ -47,7 +47,7 @@ function makePayload(spec: PayloadSpec | undefined): Buffer {
   spec = spec ?? { kind: 'jpeg' }
   if (spec.kind === 'dib')
     return makeDib(spec.width, spec.height, { channels: spec.channels, bottomUp: spec.bottomUp })
-  if (spec.kind === 'type1') return makeType1Jpeg(spec.width, spec.height, spec.q)
+  if (spec.kind === 'abbrev-jpeg') return makeAbbrevJpeg(spec.width, spec.height, spec.q)
   if (spec.kind === 'garbage') return Buffer.alloc(64, 0x5a)
   let jpeg = spec.prefix ? Buffer.concat([Buffer.alloc(12, 0xab), TINY_JPEG]) : TINY_JPEG
   if (spec.trailing) jpeg = Buffer.concat([jpeg, Buffer.alloc(20, 0xcc)]) // junk after EOI
@@ -207,7 +207,7 @@ export function buildIrfanNestedThumbsDb(): Buffer {
   return Buffer.concat([container, spurPrefix, spurHeader, realRegion])
 }
 
-// Variant B: catalog "names" are GUIDs, not filenames.
+// catalog-jpeg-guid: catalog "names" are GUIDs, not filenames.
 export function buildGuidDb(): Buffer {
   return buildThumbsDb([
     { index: 1, name: '{A42CD7B6-1111-2222-3333-444455556666}', date: new Date('2015-01-01T00:00:00Z') },
@@ -215,7 +215,7 @@ export function buildGuidDb(): Buffer {
   ])
 }
 
-// Variant C: Vista "modern" — no Catalog, `<size>_<hash>` stream names. Payload here is JPEG behind
+// hashed-jpeg: Vista "modern" — no Catalog, `<size>_<hash>` stream names. Payload here is JPEG behind
 // a 24-byte MS prefix (matches the real sample), which the SOI scan strips.
 export function buildVistaDb(): Buffer {
   const cfb = CFB.utils.cfb_new()
@@ -231,7 +231,7 @@ export function buildVistaDb(): Buffer {
 }
 
 // Standard JPEG luminance DC Huffman codes (Annex K), category -> [code, bit length]. Matches the
-// table the parser splices into a Type 1 stream, so a stream built here decodes there.
+// table the parser splices into a abbrev-jpeg stream, so a stream built here decodes there.
 const DC_LUM: Record<number, [number, number]> = {
   0: [0b00, 2],
   1: [0b010, 3],
@@ -285,11 +285,11 @@ function category(v: number): number {
   return c
 }
 
-// Encode a solid-color Type 1 thumbnail stream: SOI + SOF0 (4 components tagged R,G,B,A) + SOS +
+// Encode a solid-color abbrev-jpeg thumbnail stream: SOI + SOF0 (4 components tagged R,G,B,A) + SOS +
 // entropy + EOI, with no quantization/Huffman tables — exactly the abbreviated shape real XP streams
 // have. q is the four stored component values; a solid image has zero AC, so each block is just a DC
 // term (predicted per component) followed by EOB. q values round-trip through the parser's decode.
-export function makeType1Jpeg(width: number, height: number, q: [number, number, number, number]): Buffer {
+export function makeAbbrevJpeg(width: number, height: number, q: [number, number, number, number]): Buffer {
   // DC coefficient for a solid block, matching the parser's Annex-K luminance quant table (DC step 8)
   // and the decoder's idct scaling, so the decoded value equals q[c].
   const dc = q.map((v) => v - 128)
@@ -314,10 +314,10 @@ export function makeType1Jpeg(width: number, height: number, q: [number, number,
   return Buffer.concat([Buffer.from([0xff, 0xd8]), sof, sos, bw.finish(), Buffer.from([0xff, 0xd9])])
 }
 
-// Type 1 (Windows XP "headerless" CMYK) thumbnails: classic catalog, abbreviated 4-component JPEGs.
-export function buildType1Db(): Buffer {
+// abbrev-jpeg (Windows XP "headerless" CMYK) thumbnails: classic catalog, abbreviated 4-component JPEGs.
+export function buildAbbrevJpegDb(): Buffer {
   return buildThumbsDb([
-    { index: 1, name: 'PICT0001.JPG', date: new Date('2005-12-09T20:10:18Z'), payload: { kind: 'type1', width: 16, height: 16, q: [60, 40, 150, 230] } },
-    { index: 2, name: 'PICT0002.JPG', date: new Date('2005-12-09T20:11:00Z'), payload: { kind: 'type1', width: 16, height: 16, q: [200, 180, 90, 240] } }
+    { index: 1, name: 'PICT0001.JPG', date: new Date('2005-12-09T20:10:18Z'), payload: { kind: 'abbrev-jpeg', width: 16, height: 16, q: [60, 40, 150, 230] } },
+    { index: 2, name: 'PICT0002.JPG', date: new Date('2005-12-09T20:11:00Z'), payload: { kind: 'abbrev-jpeg', width: 16, height: 16, q: [200, 180, 90, 240] } }
   ])
 }
