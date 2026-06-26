@@ -2,7 +2,8 @@
 // container but a SQLite 3 database: a single `thumb(fname, tcreate, tmodify, fsize, width, height,
 // image)` table whose `image` blob is a complete JFIF JPEG. Read with Node's built-in `node:sqlite`
 // (zero deps). DatabaseSync opens a path, not a buffer, so parsePhotothumb takes the file path; the
-// magic check below routes a buffer to this parser at the call site (main / CLI), like cfb routes OLE2.
+// call sites (main / CLI) route here via isSqliteFile(path) — reading just the 16-byte header so the
+// OLE2 path isn't loaded into memory for a magic check — like cfb routes OLE2.
 import { DatabaseSync } from 'node:sqlite'
 import { open } from 'node:fs/promises'
 import type { ParseResult, ThumbEntry } from './types'
