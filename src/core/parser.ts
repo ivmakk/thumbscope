@@ -51,7 +51,7 @@ function realName(name: string | undefined): string | null {
 
 // Find embedded JPEG: scan to first SOI (`FF D8 FF`, handles MS thumbstream prefix),
 // trim to the last EOI (`FF D9`) so trailing junk is dropped.
-function sliceJpeg(buf: Buffer): Buffer | null {
+export function sliceJpeg(buf: Buffer): Buffer | null {
   let start = -1
   for (let i = 0; i + 2 < buf.length; i++) {
     if (buf[i] === 0xff && buf[i + 1] === 0xd8 && buf[i + 2] === 0xff) {
@@ -90,7 +90,7 @@ function pngDimensions(buf: Buffer): { width: number; height: number } | null {
 }
 
 // Decode width/height from a JPEG's first SOF marker.
-function jpegDimensions(buf: Buffer): { width: number; height: number } | null {
+export function jpegDimensions(buf: Buffer): { width: number; height: number } | null {
   let i = 2 // skip SOI
   while (i + 9 < buf.length) {
     if (buf[i] !== 0xff) {

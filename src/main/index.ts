@@ -2,6 +2,7 @@ import { join, dirname } from 'node:path'
 import { readFile, readdir } from 'node:fs/promises'
 import { app, BrowserWindow, dialog, ipcMain, shell, clipboard, Menu, nativeTheme } from 'electron'
 import { parseThumbsDb } from '../core/parser.ts'
+import { isSqliteFile, parsePhotothumb } from '../core/photothumb.ts'
 import { payloadToImage } from '../core/image.ts'
 import { exportEntries, renderAbbrevJpeg, type ExportSummary } from '../core/encode.ts'
 import type { SizeMode } from '../core/export.ts'
@@ -71,15 +72,19 @@ async function openPath(path: string) {
   const resolved = await resolveDbPath(path)
   if ('error' in resolved) return { ...resolved, path }
   path = resolved.path
-  let buf: Buffer
+  // Read only the 16-byte header to route by magic; the OLE2 path reads the full buffer, the SQLite
+  // path reopens by path inside parsePhotothumb (so no whole-file read just to discard it).
+  let sqlite: boolean
+  let buf: Buffer | null = null
   try {
-    buf = await readFile(path)
+    sqlite = await isSqliteFile(path)
+    if (!sqlite) buf = await readFile(path)
   } catch (err) {
     return { error: `Could not read file: ${(err as Error).message}`, path }
   }
   let parsed
   try {
-    parsed = parseThumbsDb(buf)
+    parsed = sqlite ? parsePhotothumb(path) : parseThumbsDb(buf!)
   } catch (err) {
     return { error: (err as Error).message, path }
   }

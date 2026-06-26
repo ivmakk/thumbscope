@@ -15,6 +15,7 @@ Format specs for everything Thumbscope reads, plus reference notes on a format i
 | 1.9 | `recovered` | any (corrupt container) | [Recovered (carved)](#19-recovered-carved--recovered) | ✅ fallback |
 | 1.10 | `hashed-png` | `Thumbs.db` | [Hashed PNG](#110-hashed-png--hashed-png) | ✅ supported |
 | 2 | - | `thumbcache_*.db` | [thumbcache (CMMM)](#2-thumbcache_db-cmmm--not-supported) | ❌ not supported |
+| 3 | `sqlite-photothumb` | `photothumb.db` | [PhotoScape SQLite cache](#3-sqlite-backed-caches-supported) | ✅ supported |
 
 Supporting sections: [1.1 Container basics](#11-container-basics), [1.8 DIB payload layout](#18-dib-payload-layout).
 
@@ -163,3 +164,38 @@ References cache entries by offset. Entry size is format-dependent (~40–72 byt
 - No filenames: label entries by ThumbnailCacheId. Optional: correlate with the index file to group size variants of the same image.
 - Reuse the existing payload handling once bytes are sliced (SOI scan still applies to JPEG payloads).
 - Validate against real files per version (20/21/30/31/32) the same way the OLE2 variants were validated in `docs/local/project-definition.md` - do not trust a single sample.
+
+---
+
+# 3. SQLite-backed caches (supported)
+
+A thumbnail cache that is **not OLE2 and not CMMM**: a plain **SQLite 3** database. Detected by the 16-byte magic `53 51 4C 69 74 65 20 66 6F 72 6D 61 74 20 33 00` (`SQLite format 3\0`) at offset 0. Read by `src/core/photothumb.ts` with Node's built-in `node:sqlite` (zero new dependencies), not `parser.ts`.
+
+## 3.1. PhotoScape `photothumb.db` - `sqlite-photothumb`
+
+A `photothumb.db` thumbnail cache. **Attribution: PhotoScape**, per multiple web sources (the file bytes carry no app name, so this is a corroborated attribution, not byte-proven). It is **not** ACDSee - ACDSee uses FoxPro `.dbf`/`.fpt` stores (`Thumb*.dbf`), a different format. A single table holds everything:
+
+```sql
+CREATE TABLE thumb(
+  fname   text primary key,  -- original filename, e.g. DSC02196.JPG
+  tcreate int,               -- cache-write time (Unix seconds)
+  tmodify int,               -- original file mtime (Unix seconds)
+  fsize   int,               -- original file size in bytes
+  width   int,               -- ORIGINAL image dimensions (not the thumbnail's)
+  height  int,
+  image   blob               -- the thumbnail: a complete JFIF JPEG
+)
+```
+
+Each `image` blob is a standard JFIF JPEG (`FF D8 FF E0 … JFIF`) and decodes directly. Mapping to `ThumbEntry`:
+
+- `name` / `label` = `fname` (`name` is `null` and `label` a positional `#n` when `fname` is missing). `streamName` is a **synthesized unique key** for the renderer's per-stream `Map`: `fname` is the table's primary key, but SQLite permits NULL/duplicate values in a non-INTEGER PK, so an empty or repeated `fname` falls back to a positional `row-n` / `#n`-suffixed id rather than colliding.
+- `payload` = `jpeg` passthrough. The blob is run through `sliceJpeg` for safety (trims any prefix/trailing junk, though the sampled blobs are clean JPEGs), then `payloadToImage` returns `image/jpeg` as-is; export re-encodes via sharp.
+- `width` / `height` = the **thumbnail's own** SOF dimensions (via `jpegDimensions`), matching every other variant - **not** the `width`/`height` columns, which describe the original photo (e.g. 3240x4320) at a different scale. The original-dimension and `fsize` columns are not surfaced today.
+- `date` = `tmodify` (original file mtime, Unix seconds → `Date`), matching the catalog-date semantics of classic `Thumbs.db` (the original file's date, not the cache-write time in `tcreate`).
+
+`index` is `null` (no catalog item IDs), `recovered` is `false`, `catalogCount` is `0`.
+
+**Layering.** `DatabaseSync` opens a file *path*, not a buffer, and `node:sqlite` is Node-only (like `cfb` / `sharp`). So `parsePhotothumb` takes the path, and `isSqliteFile(path)` routes at the call site - `src/main/index.ts` `openPath` and `src/cli/commands.ts` `load` both call `await isSqliteFile(path)` (which reads only the 16-byte header) and run `parsePhotothumb(path)` on a match, else read the full buffer and run `parseThumbsDb(buf)`. Reading just the header keeps the OLE2 path from loading a whole SQLite cache into memory only to discard it. The renderer never imports it, same as `parser.ts`. A SQLite file whose schema isn't this shape (no `thumb` table, or missing columns) throws a clear error shown as an open failure - it is **not** routed to the carve-recovery fallback (carving a SQLite b-tree yields nothing useful).
+
+Validated on one real sample (47 thumbnails) via the CLI and export. Tests build a throwaway SQLite db at runtime (`src/core/photothumb.test.ts`) rather than committing a binary fixture; no real sample is committed (real samples stay gitignored in `tests/fixtures/real/`). Other SQLite thumbnail caches (different apps/schemas) are not assumed to match - verify per format before widening `parsePhotothumb`.

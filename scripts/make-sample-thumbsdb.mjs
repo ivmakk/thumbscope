@@ -6,33 +6,39 @@
 //              R,G,B,A CMYK JPEGs, no DQT/DHT), to exercise the abbrev-jpeg decode path end-to-end.
 //   --png    — the same photo pack encoded as a hashed-png container (no Catalog, `256_<hash>` stream
 //              names, 24-byte MS prefix + PNG), to exercise the PNG passthrough path end-to-end.
+//   --photothumb — the same photo pack written as a PhotoScape-style SQLite `photothumb.db` (a single
+//              `thumb(fname,tcreate,tmodify,fsize,width,height,image)` table, JFIF JPEG blobs), to
+//              exercise the non-OLE2 SQLite path end-to-end.
 // No personal data either way. Usage:
 //   node scripts/make-sample-thumbsdb.mjs [outPath] [count]          # synthetic
 //   node scripts/make-sample-thumbsdb.mjs --real [outPath]           # real photos, classic JPEG
 //   node scripts/make-sample-thumbsdb.mjs --winxp [outPath]          # real photos, XP abbrev-jpeg
 //   node scripts/make-sample-thumbsdb.mjs --png [outPath]            # real photos, hashed-png
+//   node scripts/make-sample-thumbsdb.mjs --photothumb [outPath]     # real photos, SQLite photothumb.db
 
-import { writeFile, readdir, mkdir } from 'node:fs/promises'
+import { writeFile, readdir, mkdir, stat, rm } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { createHash } from 'node:crypto'
+import { DatabaseSync } from 'node:sqlite'
 import CFB from 'cfb'
 import sharp from 'sharp'
 import { encodeAbbrevJpeg } from './lib/encode-abbrev.mjs'
 
 const rawArgs = process.argv.slice(2)
-const KNOWN_FLAGS = ['--real', '--winxp', '--png']
+const KNOWN_FLAGS = ['--real', '--winxp', '--png', '--photothumb']
 const unknownFlag = rawArgs.find((a) => a.startsWith('-') && !KNOWN_FLAGS.includes(a))
 if (unknownFlag) throw new Error(`unknown flag: ${unknownFlag} (flags: ${KNOWN_FLAGS.join(', ')})`)
 const real = rawArgs.includes('--real')
 const winxp = rawArgs.includes('--winxp')
 const png = rawArgs.includes('--png')
-if ([real, winxp, png].filter(Boolean).length > 1) throw new Error('--real, --winxp and --png are mutually exclusive')
-const usesPack = real || winxp || png // all three modes draw from the photo pack
+const photothumb = rawArgs.includes('--photothumb')
+if ([real, winxp, png, photothumb].filter(Boolean).length > 1) throw new Error('--real, --winxp, --png and --photothumb are mutually exclusive')
+const usesPack = real || winxp || png || photothumb // all pack modes draw from the photo pack
 const positionals = rawArgs.filter((a) => !a.startsWith('-'))
 const imagesDir = 'sample/images'
-const outPath = positionals[0] || (png ? 'sample/Thumbs-png.db' : winxp ? 'sample/Thumbs-winxp.db' : real ? 'sample/Thumbs-real.db' : 'sample/Thumbs.db')
+const outPath = positionals[0] || (photothumb ? 'sample/photothumb.db' : png ? 'sample/Thumbs-png.db' : winxp ? 'sample/Thumbs-winxp.db' : real ? 'sample/Thumbs-real.db' : 'sample/Thumbs.db')
 // Pack modes derive the thumbnail count from the image pack, so a count arg would be a silent no-op.
-if (usesPack && positionals[1] !== undefined) throw new Error('--real / --winxp / --png take no count (they use every image in the pack)')
+if (usesPack && positionals[1] !== undefined) throw new Error('--real / --winxp / --png / --photothumb take no count (they use every image in the pack)')
 const count = Number(positionals[1]) || 100
 
 // HSV->RGB for varied hues across the set.
@@ -170,17 +176,40 @@ for (let i = 0; i < items.length; i += POOL) {
     ))
   )
 }
-const cfb = CFB.utils.cfb_new()
-if (png) {
-  // hashed-png: no Catalog; streams named `256_<hash>` carry the prefixed PNG payload.
-  items.forEach((it, i) => CFB.utils.cfb_add(cfb, '/' + pngStreamName(it.name), payloads[i]))
-} else {
-  CFB.utils.cfb_add(cfb, 'Catalog', buildCatalog(items))
-  items.forEach((it, i) => CFB.utils.cfb_add(cfb, '/' + reverseDigits(it.index), payloads[i]))
-}
-const buf = Buffer.from(CFB.write(cfb, { type: 'buffer' }))
-
-// Ensure the output dir exists, then write.
+// Ensure the output dir exists before writing.
 await mkdir(dirname(outPath), { recursive: true })
-await writeFile(outPath, buf)
-console.log(`wrote ${outPath} — ${items.length} thumbnails, ${(buf.length / 1024).toFixed(0)} KB`)
+
+if (photothumb) {
+  // PhotoScape-style SQLite cache: a single `thumb` table. Columns hold the ORIGINAL photo's
+  // mtime/size/dimensions; the blob is the thumbnail JPEG (payloads[i]). DatabaseSync opens a path
+  // and CREATE TABLE fails on a stale file, so start from a clean path.
+  await rm(outPath, { force: true })
+  const db = new DatabaseSync(outPath)
+  try {
+    db.exec('CREATE TABLE thumb(fname text primary key, tcreate int, tmodify int, fsize int, width int, height int, image blob)')
+    const ins = db.prepare('INSERT INTO thumb(fname, tcreate, tmodify, fsize, width, height, image) VALUES (?,?,?,?,?,?,?)')
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i]
+      const meta = await sharp(it.src).metadata() // original photo dimensions
+      const { size } = await stat(it.src) // original photo file size
+      const tmodify = Math.floor(it.date.getTime() / 1000) // original mtime, Unix seconds
+      ins.run(it.name, tmodify + 3600, tmodify, size, meta.width, meta.height, payloads[i])
+    }
+  } finally {
+    db.close()
+  }
+  const { size } = await stat(outPath)
+  console.log(`wrote ${outPath} — ${items.length} thumbnails, ${(size / 1024).toFixed(0)} KB`)
+} else {
+  const cfb = CFB.utils.cfb_new()
+  if (png) {
+    // hashed-png: no Catalog; streams named `256_<hash>` carry the prefixed PNG payload.
+    items.forEach((it, i) => CFB.utils.cfb_add(cfb, '/' + pngStreamName(it.name), payloads[i]))
+  } else {
+    CFB.utils.cfb_add(cfb, 'Catalog', buildCatalog(items))
+    items.forEach((it, i) => CFB.utils.cfb_add(cfb, '/' + reverseDigits(it.index), payloads[i]))
+  }
+  const buf = Buffer.from(CFB.write(cfb, { type: 'buffer' }))
+  await writeFile(outPath, buf)
+  console.log(`wrote ${outPath} — ${items.length} thumbnails, ${(buf.length / 1024).toFixed(0)} KB`)
+}
