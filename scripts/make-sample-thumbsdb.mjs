@@ -81,8 +81,9 @@ async function makeWinxpStream(src, w, h) {
 
 // Resize a real source photo to a 256px box and emit a hashed-png stream: 24-byte MS prefix
 // (headerSize=24, type=3 for PNG, dataSize; checksum left zero - the parser routes by signature) + PNG.
+// Palette-quantized so the committed sample stays small (PNG-encoded photos are otherwise bulky).
 async function makePngStream(src) {
-  const data = await sharp(src).resize(256, 256, { fit: 'inside', withoutEnlargement: true }).png().toBuffer()
+  const data = await sharp(src).resize(256, 256, { fit: 'inside', withoutEnlargement: true }).png({ palette: true, colors: 64 }).toBuffer()
   const pre = Buffer.alloc(24)
   pre.writeUInt32LE(24, 0) // header size
   pre.writeUInt32LE(3, 4) // payload type = 3 (PNG)
@@ -139,7 +140,9 @@ const items = []
 const base = Date.UTC(2008, 0, 1)
 if (usesPack) {
   // One thumbnail per source photo, keeping its real (already-generic) IMG_NNNN.JPG filename.
-  const files = await loadRealImages(imagesDir)
+  // PNG mode keeps just a handful (PNG payloads are large) - enough to exercise the variant.
+  const PNG_SAMPLE_COUNT = 4
+  const files = png ? (await loadRealImages(imagesDir)).slice(0, PNG_SAMPLE_COUNT) : await loadRealImages(imagesDir)
   files.forEach((file, idx) => {
     const i = idx + 1
     const [w, h] = sizes[i % sizes.length]
