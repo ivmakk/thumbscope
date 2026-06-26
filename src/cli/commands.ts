@@ -4,6 +4,7 @@
 import { dirname } from 'node:path'
 import { readFile, mkdir, writeFile } from 'node:fs/promises'
 import { parseThumbsDb } from '../core/parser.ts'
+import { isSqliteFile, parsePhotothumb } from '../core/photothumb.ts'
 import { resolveDbPath } from '../core/shell.ts'
 import { exportEntries } from '../core/encode.ts'
 import { toCsv, type SizeMode, type CsvRow } from '../core/export.ts'
@@ -27,14 +28,18 @@ export interface ListArgs {
 async function load(db: string): Promise<{ path: string; entries: ThumbEntry[] } | { error: string }> {
   const resolved = await resolveDbPath(db)
   if ('error' in resolved) return resolved
-  let buf: Buffer
+  // Read only the 16-byte header to route by magic; the OLE2 path reads the full buffer, the SQLite
+  // path reopens by path inside parsePhotothumb (so no whole-file read just to discard it).
+  let sqlite: boolean
+  let buf: Buffer | null = null
   try {
-    buf = await readFile(resolved.path)
+    sqlite = await isSqliteFile(resolved.path)
+    if (!sqlite) buf = await readFile(resolved.path)
   } catch (err) {
     return { error: `Could not read file: ${(err as Error).message}` }
   }
   try {
-    const parsed = parseThumbsDb(buf)
+    const parsed = sqlite ? parsePhotothumb(resolved.path) : parseThumbsDb(buf!)
     return { path: resolved.path, entries: sortByIndex(parsed.entries) }
   } catch (err) {
     return { error: (err as Error).message }
