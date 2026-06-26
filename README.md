@@ -42,6 +42,7 @@ Cross-platform desktop viewer (Electron + React + TypeScript) to open proprietar
 | `Thumbs.db` (Windows Vista / 7) | JPEG | Newer per-folder cache; thumbnails only, no filenames. - OLE2/CFB, no catalog; per-size streams (`<size>_<hash>`), JPEG behind a Microsoft thumbstream header; hash labels. |
 | `ehthumbs.db` | BMP / DIB | Windows Media Center cache, with filenames and dates. - OLE2/CFB, 8-byte catalog header; 24/32bpp DIB payloads. |
 | `ivThumbs.db` (IrfanView) | BMP | IrfanView's thumbnail database, with real filenames and dates. - OLE2/CFB marked by a `_Thumbs_DB_Ver` stream, no catalog; filename-named streams of FILETIME-prefixed BMP; flat and nested layouts. |
+| `photothumb.db` (PhotoScape) | JPEG | PhotoScape's thumbnail cache, with real filenames and dates. - SQLite 3 database (not OLE2), a single `thumb` table of JFIF JPEG blobs. |
 
 More formats are on the roadmap - [suggest one](https://github.com/ivmakk/thumbscope/issues/new) with the format name and its source app.
 
