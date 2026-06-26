@@ -1,15 +1,13 @@
 ---
 name: create-pull-request
 description: >
-  Use this skill for ANY GitHub Pull Request creation in the Thumbscope repo. BLOCKING: invoke
-  before running `gh pr create` — never assemble a PR body inline or in a temp file without going
-  through this skill's template first. Activates on: "create a PR", "open a pull request", "draft
-  PR", "write the PR body", "ship as PR", "send for review", "push and PR", "PR it", "open it",
-  "ship it" — and any chained command that ends in PR creation (e.g. "commit, push, then open a
-  PR"). Also activates when the user names a ticket/issue and asks to submit, ship, or hand off the
-  work, even without the literal word "PR". Produces a PR with description, related-issue link,
-  type-of-change, testing, and checklist; opens it via the gh CLI. Because the repo is public, it
-  keeps real local paths and personal data out of the PR.
+  Use for ANY GitHub Pull Request creation in the Thumbscope repo. BLOCKING: invoke before
+  `gh pr create` — never assemble a PR body inline or in a temp file without this skill's
+  template. Activates on "create a PR", "open a pull request", "push and PR", and any chained
+  command ending in PR creation (e.g. "commit, push, then open a PR"), or when the user names a
+  ticket and asks to submit/ship/hand off the work. Produces the description, related-issue link,
+  type-of-change, testing, and checklist via the gh CLI; keeps real local paths and PII out
+  (public repo).
 argument-hint: "issue number or short description of the change"
 ---
 

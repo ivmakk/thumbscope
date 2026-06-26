@@ -7,6 +7,7 @@ description: >
   via the gh CLI. Enforces community-standard structure (typed title prefixes, problem→solution→
   alternatives features, structured bug reports), outcome-based acceptance criteria, and — because the
   repo is public — zero real local paths or personal data.
+argument-hint: "feature | bug | issue number to draft or review"
 ---
 
 # Thumbscope Issue Formatting
