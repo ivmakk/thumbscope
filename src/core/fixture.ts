@@ -6,6 +6,12 @@ export const TINY_JPEG = Buffer.from(
   'base64'
 )
 
+// 3x2 PNG (solid color), valid + decodable, used as hashed-png thumbnail payload in fixtures.
+export const TINY_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAMAAAACCAIAAAASFvFNAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEElEQVQImWPgEpGDIAY4CwANrAFpFLBzTgAAAABJRU5ErkJggg==',
+  'base64'
+)
+
 type PayloadSpec =
   | { kind: 'jpeg'; prefix?: boolean; trailing?: boolean }
   | { kind: 'dib'; width: number; height: number; channels?: 3 | 4; bottomUp?: boolean }
@@ -225,6 +231,21 @@ export function buildVistaDb(): Buffer {
   const items = [
     { name: '256_31bd239b11dd5a70', payload: Buffer.concat([prefix, TINY_JPEG]) },
     { name: '256_88baea7191a5a539', payload: Buffer.concat([prefix, TINY_JPEG]) }
+  ]
+  for (const it of items) CFB.utils.cfb_add(cfb, '/' + it.name, it.payload)
+  return Buffer.from(CFB.write(cfb, { type: 'buffer' }) as Uint8Array)
+}
+
+// hashed-png: same hashed layout as hashed-jpeg (no Catalog, `<size>_<hash>` streams), but the payload
+// is a PNG behind the 24-byte MS prefix instead of a JPEG. The PNG-signature scan strips the prefix.
+export function buildHashedPngDb(): Buffer {
+  const cfb = CFB.utils.cfb_new()
+  // 24-byte MS prefix: headerSize=24 but width=0, so DIB routing rejects it (same shape as buildVistaDb).
+  const prefix = Buffer.alloc(24, 0)
+  prefix.writeUInt32LE(24, 0)
+  const items = [
+    { name: '256_24ecf3db3592c791', payload: Buffer.concat([prefix, TINY_PNG]) },
+    { name: '256_6d37a2e7227263f0', payload: Buffer.concat([prefix, TINY_PNG]) }
   ]
   for (const it of items) CFB.utils.cfb_add(cfb, '/' + it.name, it.payload)
   return Buffer.from(CFB.write(cfb, { type: 'buffer' }) as Uint8Array)

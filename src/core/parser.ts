@@ -66,6 +66,29 @@ function sliceJpeg(buf: Buffer): Buffer | null {
   return buf.subarray(start)
 }
 
+// PNG 8-byte signature immediately followed by the IHDR chunk header (length 0x0000000D + 'IHDR').
+// Matching all 16 bytes (not just the 8-byte signature) means a stray PNG signature inside JPEG entropy
+// data can't trigger a false PNG route — a real PNG always opens with IHDR.
+const PNG_SIG_IHDR = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex')
+
+// Find an embedded PNG: scan to the signature+IHDR (steps over the MS thumbstream prefix, like
+// sliceJpeg skips to the SOI), slice to the buffer end (the PNG fills the stream). Null if absent.
+function slicePng(buf: Buffer): Buffer | null {
+  const at = buf.indexOf(PNG_SIG_IHDR)
+  return at < 0 ? null : buf.subarray(at)
+}
+
+// Decode width/height from a PNG's IHDR (width at sig+16, height at sig+20, big-endian). Bounds-checked
+// like jpegDimensions/parseDib so a malformed IHDR yields null rather than a bogus dimension.
+function pngDimensions(buf: Buffer): { width: number; height: number } | null {
+  if (buf.length < 24) return null
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
+  const width = dv.getUint32(16, false)
+  const height = dv.getUint32(20, false)
+  if (width <= 0 || height <= 0 || width > 20000 || height > 20000) return null
+  return { width, height }
+}
+
 // Decode width/height from a JPEG's first SOF marker.
 function jpegDimensions(buf: Buffer): { width: number; height: number } | null {
   let i = 2 // skip SOI
@@ -256,12 +279,16 @@ function parseBmp(buf: Buffer): { width: number; height: number; pixels: Buffer 
   return { width, height, pixels: out }
 }
 
-// Route a stream's bytes to a payload by signature. DIB first (strict header), then JPEG. A abbrev-jpeg
-// JPEG (headerless XP CMYK) is reconstructed into a `abbrev-jpeg` payload that decodeAbbrevRgb later renders
-// to RGB; on reconstruction failure it falls back to the raw bytes so the entry still lists.
+// Route a stream's bytes to a payload by signature. DIB first (strict header), then PNG, then JPEG. PNG
+// must precede JPEG because a PNG's compressed body can incidentally contain `FF D8 FF`, which sliceJpeg
+// would mis-slice. A abbrev-jpeg JPEG (headerless XP CMYK) is reconstructed into a `abbrev-jpeg` payload
+// that decodeAbbrevRgb later renders to RGB; on reconstruction failure it falls back to the raw bytes so
+// the entry still lists.
 function classify(content: Buffer): Payload | null {
   const dib = parseDib(content)
   if (dib) return { kind: 'dib', width: dib.width, height: dib.height, pixels: dib.pixels }
+  const png = slicePng(content)
+  if (png) return { kind: 'png', data: png }
   const jpeg = sliceJpeg(content)
   if (jpeg) {
     if (isAbbrevJpeg(jpeg)) {
@@ -273,10 +300,10 @@ function classify(content: Buffer): Payload | null {
   return null
 }
 
-// Width/height for an entry: from a decoded DIB, else read from the JPEG/CMYK payload's SOF marker.
+// Width/height for an entry: from a decoded DIB, a PNG's IHDR, else the JPEG/CMYK payload's SOF marker.
 function payloadDimensions(payload: Payload): { width: number | null; height: number | null } {
   if (payload.kind === 'dib') return { width: payload.width, height: payload.height }
-  const d = jpegDimensions(payload.data)
+  const d = payload.kind === 'png' ? pngDimensions(payload.data) : jpegDimensions(payload.data)
   return { width: d?.width ?? null, height: d?.height ?? null }
 }
 
@@ -328,25 +355,60 @@ function carveJpegs(buf: Buffer): Buffer[] {
   return out
 }
 
-// Recovery path: build entries from raw-carved JPEGs. No catalog, so labels are positional only.
-function carveFallback(fileBuffer: Buffer): ParseResult {
-  const entries: ThumbEntry[] = []
-  let index = 0
-  for (const data of carveJpegs(fileBuffer)) {
-    index++
-    const d = jpegDimensions(data)
-    entries.push({
-      index,
-      streamName: `carved-${index}`,
-      name: null,
-      label: `#${index}`,
-      date: null,
-      width: d?.width ?? null,
-      height: d?.height ?? null,
-      size: data.length,
-      payload: { kind: 'jpeg', data }
-    })
+// Scan a whole buffer for PNG runs (signature+IHDR .. end of the IEND chunk), non-overlapping. The PNG
+// analogue of carveJpegs, used to recover thumbnails from a damaged hashed-png container CFB can't open.
+// The end is found by walking the chunk chain (each chunk: u32be length + 4-byte type + data + u32 CRC)
+// until the IEND chunk - a plain `indexOf('IEND')` would false-match those 4 bytes inside compressed
+// IDAT data and truncate the slice. A run with no IEND (truncated file) is kept from the signature to
+// end so partial images still render.
+function carvePngs(buf: Buffer): Buffer[] {
+  const out: Buffer[] = []
+  let i = 0
+  while ((i = buf.indexOf(PNG_SIG_IHDR, i)) >= 0) {
+    let pos = i + 8 // first chunk (IHDR) starts right after the 8-byte signature
+    let end = -1
+    while (pos + 8 <= buf.length) {
+      const len = buf.readUInt32BE(pos)
+      const type = buf.toString('latin1', pos + 4, pos + 8)
+      const next = pos + 12 + len // length(4) + type(4) + data(len) + CRC(4)
+      if (type === 'IEND') {
+        end = Math.min(next, buf.length)
+        break
+      }
+      if (next > buf.length || next <= pos) break // truncated or malformed chunk
+      pos = next
+    }
+    if (end < 0) {
+      if (buf.length - i >= CARVE_MIN_BYTES) out.push(buf.subarray(i)) // no IEND: keep to end
+      break
+    }
+    if (end - i >= CARVE_MIN_BYTES) out.push(buf.subarray(i, end))
+    i = end
   }
+  return out
+}
+
+// Recovery path: build entries from raw-carved payloads. No catalog, so labels are positional only.
+// JPEG runs are carved first; if none survive, fall back to carving PNG runs (a damaged hashed-png file).
+function carveFallback(fileBuffer: Buffer): ParseResult {
+  const jpegs = carveJpegs(fileBuffer)
+  const payloads: Payload[] = jpegs.length
+    ? jpegs.map((data) => ({ kind: 'jpeg', data }))
+    : carvePngs(fileBuffer).map((data) => ({ kind: 'png', data }))
+  const entries: ThumbEntry[] = payloads.map((payload, i) => {
+    const { width, height } = payloadDimensions(payload)
+    return {
+      index: i + 1,
+      streamName: `carved-${i + 1}`,
+      name: null,
+      label: `#${i + 1}`,
+      date: null,
+      width,
+      height,
+      size: payloadSize(payload),
+      payload
+    }
+  })
   return { count: entries.length, failed: 0, catalogCount: 0, entries, recovered: true }
 }
 
