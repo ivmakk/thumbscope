@@ -16,6 +16,11 @@ function createWindow(): void {
   const win = new BrowserWindow({
     width: 1280,
     height: 860,
+    // Floor the window size so the two-panel layout (and the preview control bar at the
+    // preview panel's minimum width) can't be squeezed to clipping at extreme small
+    // widths. The panel minimum is a dynamic ~150px floor computed in the renderer.
+    minWidth: 720,
+    minHeight: 520,
     show: false,
     // Packaged builds use the exe-embedded icon; in dev point at the source PNG so the
     // taskbar/window show branding (import.meta.dirname is out/main -> repo build/).

@@ -52,6 +52,13 @@ const SORT_OPTIONS = SORT_FIELDS.flatMap((f) => [
   { value: `${f.key}:desc`, label: f.label, dir: 'desc' as SortDir }
 ])
 
+// Preview panel minimum as an absolute px floor (~150px, enough for the collapsed control
+// bar) expressed as a percentage of the window (the full-width panel group). A fixed
+// percentage over-restricts on wide windows (20% of 1280 = 256px) yet under-protects on
+// narrow ones. Returns a coarse integer percent, so live resizing only changes it at a
+// boundary crossing, not every pixel.
+const previewMinPctFor = (winWidth: number): number => Math.min(40, Math.max(8, Math.round((150 / winWidth) * 100)))
+
 function App(): React.JSX.Element {
   const [result, setResult] = useState<OpenResult | null>(null)
   const [error, setError] = useState<{ msg: string; path?: string; raw: string } | null>(null)
@@ -67,6 +74,14 @@ function App(): React.JSX.Element {
   const [dragging, setDragging] = useState(false)
   const [orphanFilter, setOrphanFilter] = useState(false) // show only recoverable (orphan) thumbs
   const [theme, setThemeState] = useState<ThemeChoice>(getStoredChoice)
+  // Store the coarse percent (not raw width) so setting it to the same value on most
+  // resize ticks bails the re-render — only a boundary crossing re-renders App.
+  const [previewMinPct, setPreviewMinPct] = useState(() => previewMinPctFor(window.innerWidth))
+  useEffect(() => {
+    const onResize = (): void => setPreviewMinPct(previewMinPctFor(window.innerWidth))
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   // Remember the grid thumbnail size across sessions.
   useEffect(() => {
@@ -344,6 +359,7 @@ function App(): React.JSX.Element {
                     entries={entries}
                     selected={selection.selected}
                     previewId={previewId}
+                    version={openId}
                     onClick={onEntryClick}
                     sortKey={sortKey}
                     sortDir={sortDir}
@@ -392,7 +408,7 @@ function App(): React.JSX.Element {
             </div>
           </ResizablePanel>
           <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={38} minSize={20}>
+          <ResizablePanel defaultSize={38} minSize={previewMinPct}>
             <Preview entry={previewEntry} version={openId} />
           </ResizablePanel>
         </ResizablePanelGroup>

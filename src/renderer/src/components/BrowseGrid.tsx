@@ -2,9 +2,11 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { ThumbMeta } from '../../../preload'
 import { ThumbImage } from './ThumbImage'
+import { FileName } from './FileName'
+import { useResetScrollOnVersion } from '@/lib/useResetScrollOnVersion'
 import { cn } from '@/lib/utils'
 
-const LABEL_H = 34 // label + dims rows below the image
+const LABEL_H = 38 // label + dims rows below the image
 const GAP = 8
 
 export function BrowseGrid({
@@ -47,6 +49,8 @@ export function BrowseGrid({
 
   useLayoutEffect(() => virt.measure(), [rowH, cols, virt])
 
+  useResetScrollOnVersion(virt, version)
+
   return (
     <div ref={scrollRef} className="h-full overflow-auto p-2">
       <div style={{ height: virt.getTotalSize(), position: 'relative', width: '100%' }}>
@@ -67,7 +71,7 @@ export function BrowseGrid({
                     onClick={(ev) => onClick(e, { shift: ev.shiftKey, ctrl: ev.ctrlKey || ev.metaKey })}
                     title={e.label}
                     className={cn(
-                      'relative flex flex-col items-center justify-start gap-1 rounded-md border p-1.5 text-center',
+                      'relative flex flex-col items-center justify-start gap-1 overflow-hidden rounded-md border p-1.5 text-center',
                       'bg-card hover:bg-muted/60',
                       isSel ? 'border-ring bg-accent' : 'border-border',
                       previewId === e.streamName && 'ring-2 ring-ring'
@@ -87,8 +91,8 @@ export function BrowseGrid({
                       className="rounded border border-border object-contain"
                       style={{ width: img, height: img }}
                     />
-                    <span className="w-full truncate text-xs">{e.label}</span>
-                    <span className="text-[10px] text-muted-foreground">
+                    <FileName label={e.label} className="text-xs" />
+                    <span className="w-full truncate text-[10px] text-muted-foreground">
                       {e.width && e.height ? `${e.width}×${e.height}` : '—'} · {e.format}
                     </span>
                   </button>

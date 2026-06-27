@@ -3,6 +3,8 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import type { ThumbMeta } from '../../../preload'
 import type { SortDir, SortKey } from '@core/view'
+import { FileName } from './FileName'
+import { useResetScrollOnVersion } from '@/lib/useResetScrollOnVersion'
 import { cn } from '@/lib/utils'
 
 const ROW_H = 30
@@ -20,6 +22,7 @@ export function BrowseTable({
   entries,
   selected,
   previewId,
+  version,
   onClick,
   sortKey,
   sortDir,
@@ -28,6 +31,7 @@ export function BrowseTable({
   entries: ThumbMeta[]
   selected: Set<string>
   previewId: string | null
+  version: number
   onClick: (e: ThumbMeta, mods: { shift: boolean; ctrl: boolean }) => void
   sortKey: SortKey
   sortDir: SortDir
@@ -40,6 +44,8 @@ export function BrowseTable({
     estimateSize: () => ROW_H,
     overscan: 10
   })
+
+  useResetScrollOnVersion(virt, version)
 
   const Head = ({ k, label, className }: { k: SortKey; label: string; className?: string }) => (
     <button
@@ -79,7 +85,7 @@ export function BrowseTable({
               >
                 <span className="truncate px-2 text-muted-foreground">{e.index ?? '—'}</span>
                 <span className="flex items-center gap-1.5 px-2" title={e.orphan ? `${e.label} — original not found, recoverable` : e.label}>
-                  <span className="truncate">{e.label}</span>
+                  <FileName label={e.label} title={e.orphan ? `${e.label} — original not found, recoverable` : e.label} className="min-w-0" />
                   {e.orphan && <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" title="Original not found — recoverable" />}
                 </span>
                 <span className="px-2">{fmtSize(e.size)}</span>
