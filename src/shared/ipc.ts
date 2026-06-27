@@ -11,8 +11,8 @@ import type { SizeMode } from '../core/export.ts'
 export type { SizeMode }
 
 // Request/response channels: every key must have a matching `ipcMain.handle(CHANNELS.<key>, ...)`
-// in main and an `ipcRenderer.invoke(CHANNELS.<key>, ...)` in preload. The T2 wiring test asserts
-// the registered-handler set equals Object.keys(CHANNELS).
+// in main and an `ipcRenderer.invoke(CHANNELS.<key>, ...)` in preload. The wiring test
+// (src/ipc-contract.test.ts) asserts the registered-handler set equals Object.keys(CHANNELS).
 export const CHANNELS = {
   openFile: 'open-file',
   openPath: 'open-path',

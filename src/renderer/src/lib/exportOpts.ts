@@ -19,15 +19,30 @@ export interface ExportState {
   dest: Dest
 }
 
+type ScopeInput = Pick<ExportState, 'scope' | 'selectedIds' | 'orphanIds' | 'totalCount'>
+
+// Resolve the scope once: the stream-name list to export ('all' => null, i.e. every entry) and how
+// many thumbnails that covers. Single source for the scope rule so the button count and the exported
+// set can't disagree.
+function resolveScope(s: ScopeInput): { streamNames: string[] | null; count: number } {
+  switch (s.scope) {
+    case 'selected':
+      return { streamNames: s.selectedIds, count: s.selectedIds.length }
+    case 'orphans':
+      return { streamNames: s.orphanIds, count: s.orphanIds.length }
+    case 'all':
+      return { streamNames: null, count: s.totalCount }
+  }
+}
+
 // How many thumbnails the chosen scope covers (drives the "Export N" label + the disabled-on-zero guard).
-export function selectionCount(s: Pick<ExportState, 'scope' | 'selectedIds' | 'orphanIds' | 'totalCount'>): number {
-  return s.scope === 'selected' ? s.selectedIds.length : s.scope === 'orphans' ? s.orphanIds.length : s.totalCount
+export function selectionCount(s: ScopeInput): number {
+  return resolveScope(s).count
 }
 
 export function buildExportOpts(s: ExportState): ExportOpts {
   return {
-    // 'all' => null (main exports every entry); otherwise the explicit stream-name list.
-    streamNames: s.scope === 'all' ? null : s.scope === 'orphans' ? s.orphanIds : s.selectedIds,
+    streamNames: resolveScope(s).streamNames,
     mode: s.mode,
     quality: s.quality,
     includeCsv: s.includeCsv,

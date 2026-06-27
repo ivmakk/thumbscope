@@ -24,7 +24,7 @@ import { MenuBar } from '@/components/MenuBar'
 import { resetImageCache } from '@/lib/imageCache'
 import { friendlyError } from '@/lib/errors'
 import { previewMinPctFor } from '@/lib/layout'
-import { parseThumbSize, DEFAULT_THUMB } from '@/lib/thumbSize'
+import { parseThumbSize, DEFAULT_THUMB, THUMB_MIN, THUMB_MAX } from '@/lib/thumbSize'
 import { keyToAction } from '@/lib/keys'
 import { applyDark, getStoredChoice, storeChoice } from '@/lib/theme'
 import type { ThemeChoice } from '../../preload'
@@ -377,8 +377,8 @@ function App(): React.JSX.Element {
                       ×{Number.isInteger(thumbSize / DEFAULT_THUMB) ? thumbSize / DEFAULT_THUMB : (thumbSize / DEFAULT_THUMB).toFixed(1)}
                     </button>
                     <Slider
-                      min={90}
-                      max={300}
+                      min={THUMB_MIN}
+                      max={THUMB_MAX}
                       step={10}
                       value={[thumbSize]}
                       onValueChange={(v) => setThumbSize(v[0])}
