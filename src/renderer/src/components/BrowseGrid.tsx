@@ -71,7 +71,7 @@ export function BrowseGrid({
                     onClick={(ev) => onClick(e, { shift: ev.shiftKey, ctrl: ev.ctrlKey || ev.metaKey })}
                     title={e.label}
                     className={cn(
-                      'relative flex flex-col items-center justify-start gap-1 rounded-md border p-1.5 text-center',
+                      'relative flex flex-col items-center justify-start gap-1 overflow-hidden rounded-md border p-1.5 text-center',
                       'bg-card hover:bg-muted/60',
                       isSel ? 'border-ring bg-accent' : 'border-border',
                       previewId === e.streamName && 'ring-2 ring-ring'
@@ -92,7 +92,7 @@ export function BrowseGrid({
                       style={{ width: img, height: img }}
                     />
                     <FileName label={e.label} className="text-xs" />
-                    <span className="text-[10px] text-muted-foreground">
+                    <span className="w-full truncate text-[10px] text-muted-foreground">
                       {e.width && e.height ? `${e.width}×${e.height}` : '—'} · {e.format}
                     </span>
                   </button>
