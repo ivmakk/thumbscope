@@ -49,10 +49,11 @@ test('{ format } override forces the chosen handler, skipping detection', () => 
   assert.ok(r.format.startsWith('irfanview'), `expected irfanview*, got ${r.format}`)
 })
 
-test('{ format } with an unknown slug returns a clean empty result, not a throw', () => {
-  const r = parseThumbsDb(buildThumbsDb(), { format: 'no-such-format' })
-  assert.strictEqual(r.count, 0)
-  assert.strictEqual(r.format, 'no-such-format')
+test('{ format } with an unknown slug throws a clear error (no bogus format echo)', () => {
+  assert.throws(
+    () => parseThumbsDb(buildThumbsDb(), { format: 'no-such-format' }),
+    /Unknown --format handler/
+  )
 })
 
 // Tier-2 is owned by the orchestrator: a non-OLE2 buffer with carveable payloads recovers; one with

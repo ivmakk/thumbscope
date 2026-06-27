@@ -49,9 +49,9 @@ export function parseThumbsDb(fileBuffer: Buffer, opts?: OpenOptions): ParseResu
   // result, even when empty, instead of carved output silently masking it.
   if (opts?.format) {
     const forced = registry.find((h) => h.slug === opts.format)
-    // Unknown slug → clean empty result, never a throw. The requested slug is echoed back as a debug
-    // aid; it isn't a real ContainerFormat, hence the cast.
-    if (!forced) return emptyResult(opts.format as ContainerFormat)
+    // Unknown slug is a caller error - fail loud rather than echo a bogus value back through the closed
+    // ContainerFormat type. The auto/detection path below is the only one that carves.
+    if (!forced) throw new Error(`Unknown --format handler "${opts.format}" (valid: ${registry.map((h) => h.slug).join(', ')})`)
     return forced.parse(ctx)
   }
 
@@ -78,8 +78,12 @@ export async function openThumbnailDb(path: string, opts?: OpenOptions): Promise
   try {
     const header = Buffer.alloc(16)
     const { bytesRead } = await fh.read(header, 0, 16, 0)
-    // SQLite is routed by path (DatabaseSync reopens it), so the full buffer is never loaded for it.
-    if (detectSqlite(bytesRead < 16 ? header.subarray(0, bytesRead) : header)) return parseSqlite(path)
+    // SQLite is auto-routed by path (DatabaseSync reopens it) so the full buffer is never loaded for it -
+    // but a {format} override means "skip detection", so it bypasses the header route and runs the
+    // buffer tier (sqlite-photothumb is path-tier, not a forceable buffer handler).
+    if (!opts?.format && detectSqlite(bytesRead < 16 ? header.subarray(0, bytesRead) : header)) {
+      return parseSqlite(path)
+    }
     // OLE2: read the whole file from the same handle (the positional header read left the position at 0),
     // avoiding a second open/read of the same file.
     return parseThumbsDb(await fh.readFile(), opts)

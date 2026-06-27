@@ -121,7 +121,7 @@ test('cmdExport --format cfb forces the cfb handler and exports normally', async
   await rm(dir, { recursive: true, force: true })
 })
 
-test('cmdExport --format with an unknown slug selects no handler -> nothing to export, exit 1', async () => {
+test('cmdExport --format with an unknown slug errors out, exit 1', async () => {
   const dir = await tmp()
   const db = join(dir, 'Thumbs.db')
   await writeFile(db, buildThumbsDb())
@@ -130,7 +130,7 @@ test('cmdExport --format with an unknown slug selects no handler -> nothing to e
     cmdExport(db, { out: join(dir, 'o'), mode: 'original', quality: '80', csv: false, overwrite: false, format: 'no-such' })
   )
   assert.equal(code, 1)
-  assert.match(err, /No thumbnails to export/)
+  assert.match(err, /Unknown --format handler/)
 
   await rm(dir, { recursive: true, force: true })
 })
