@@ -18,3 +18,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      # Renderer render tests (Vitest + happy-dom). Separate step for per-runner failure
+      # attribution; `if: always()` so a red node suite still reports this one too.
+      - run: npm run test:renderer
+        if: always()

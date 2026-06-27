@@ -22,6 +22,10 @@ import { Preview } from '@/components/Preview'
 import { ExportDialog } from '@/components/ExportDialog'
 import { MenuBar } from '@/components/MenuBar'
 import { resetImageCache } from '@/lib/imageCache'
+import { friendlyError } from '@/lib/errors'
+import { previewMinPctFor } from '@/lib/layout'
+import { parseThumbSize, DEFAULT_THUMB, THUMB_MIN, THUMB_MAX } from '@/lib/thumbSize'
+import { keyToAction } from '@/lib/keys'
 import { applyDark, getStoredChoice, storeChoice } from '@/lib/theme'
 import type { ThemeChoice } from '../../preload'
 
@@ -33,31 +37,15 @@ const SORT_FIELDS: { key: SortKey; label: string }[] = [
   { key: 'size', label: 'Size' },
   { key: 'date', label: 'Date' }
 ]
-const DEFAULT_THUMB = 150
 const THUMB_KEY = 'grid.thumbSize' // remembered across sessions
 function initThumbSize(): number {
-  const v = Number(localStorage.getItem(THUMB_KEY))
-  return Number.isFinite(v) && v >= 90 && v <= 300 ? v : DEFAULT_THUMB
-}
-
-// Map main's raw error text to a short, end-user message.
-function friendlyError(raw: string): string {
-  if (/folder/i.test(raw)) return 'No Thumbs.db or ehthumbs.db found in that folder.'
-  if (/could not (read|open)/i.test(raw)) return "Couldn't open that file."
-  return 'Unsupported file — not a Thumbs.db or ehthumbs.db.'
+  return parseThumbSize(localStorage.getItem(THUMB_KEY))
 }
 
 const SORT_OPTIONS = SORT_FIELDS.flatMap((f) => [
   { value: `${f.key}:asc`, label: f.label, dir: 'asc' as SortDir },
   { value: `${f.key}:desc`, label: f.label, dir: 'desc' as SortDir }
 ])
-
-// Preview panel minimum as an absolute px floor (~150px, enough for the collapsed control
-// bar) expressed as a percentage of the window (the full-width panel group). A fixed
-// percentage over-restricts on wide windows (20% of 1280 = 256px) yet under-protects on
-// narrow ones. Returns a coarse integer percent, so live resizing only changes it at a
-// boundary crossing, not every pixel.
-const previewMinPctFor = (winWidth: number): number => Math.min(40, Math.max(8, Math.round((150 / winWidth) * 100)))
 
 function App(): React.JSX.Element {
   const [result, setResult] = useState<OpenResult | null>(null)
@@ -183,20 +171,15 @@ function App(): React.JSX.Element {
       const t = e.target as HTMLElement | null
       const typing =
         !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
-      if (e.ctrlKey && e.key.toLowerCase() === 'o') {
-        e.preventDefault()
-        doOpen()
-      } else if (e.ctrlKey && e.key.toLowerCase() === 'e') {
-        e.preventDefault()
-        doExport()
-      } else if (e.ctrlKey && e.key.toLowerCase() === 'a' && !typing) {
-        e.preventDefault() // else the browser selects the whole UI's DOM text
-        doSelectAll()
-      } else if (e.key === 'F12') {
-        window.api.windowAction('toggle-devtools')
-      } else if (e.key === 'F11') {
-        e.preventDefault()
-        window.api.windowAction('toggle-fullscreen')
+      const hit = keyToAction({ ctrlKey: e.ctrlKey, key: e.key, typing })
+      if (!hit) return
+      if (hit.preventDefault) e.preventDefault()
+      switch (hit.action) {
+        case 'open': doOpen(); break
+        case 'export': doExport(); break
+        case 'select-all': doSelectAll(); break
+        case 'toggle-devtools': window.api.windowAction('toggle-devtools'); break
+        case 'toggle-fullscreen': window.api.windowAction('toggle-fullscreen'); break
       }
     }
     window.addEventListener('keydown', onKey)
@@ -394,8 +377,8 @@ function App(): React.JSX.Element {
                       ×{Number.isInteger(thumbSize / DEFAULT_THUMB) ? thumbSize / DEFAULT_THUMB : (thumbSize / DEFAULT_THUMB).toFixed(1)}
                     </button>
                     <Slider
-                      min={90}
-                      max={300}
+                      min={THUMB_MIN}
+                      max={THUMB_MAX}
                       step={10}
                       value={[thumbSize]}
                       onValueChange={(v) => setThumbSize(v[0])}

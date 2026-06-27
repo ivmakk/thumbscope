@@ -25,7 +25,11 @@ Decided deliberately; don't relitigate without reason.
 - `npm run dev` - electron-vite dev server + Electron (renderer HMR).
 - `npm run build` - production build into `out/`. Does **not** type-check.
 - `npm run typecheck` - `tsgo --noEmit` (TypeScript 7 native compiler, `@typescript/native-preview`) for both projects (node + web). Run this separately. `typescript@6` stays installed as the editor/language-service engine; `npm run typecheck:tsc` runs the same check on classic `tsc` (fallback for platforms with no `tsgo` native binary, or if the preview channel breaks).
-- `npm test` - `node --test "src/**/*.test.ts"`.
+- `npm test` - `node --test "src/**/*.test.ts"`. Owns every `*.test.ts` (core, CLI, renderer logic kernels, IPC-contract guard) - fast, zero-dep, the default.
+- `npm run test:core` - `node --test "src/core/**/*.test.ts"` (core-only inner loop).
+- `npm run test:renderer` - `vitest run` (React render tests, `*.test.tsx`, happy-dom). The only tier that needs a DOM.
+- `npm run test:all` - both tiers (`npm test` then `vitest run`).
+- **Test-file convention:** extension picks the runner - `*.test.ts` -> `node --test` (pure logic, no DOM), `*.test.tsx` -> Vitest (component render). Default to extracting pure logic into `src/renderer/src/lib/` and testing it under `node --test`; reserve `.test.tsx` for what genuinely needs a browser.
 - Single test file: `node --test src/core/parser.test.ts`.
 - `npm run cli -- <args>` - run the CLI from source (e.g. `npm run cli -- list sample/Thumbs.db`).
 - `npm run build:icons` - regenerate the icon set from `build/icon.svg` (see Branding).
@@ -51,7 +55,8 @@ Three Electron layers plus a shared core, all TypeScript:
   - `view.ts` - filter/sort/selection helpers, kept in core so they're unit-tested without a DOM.
   - `types.ts`, `fixture.ts` - shared types and the committable synthetic CFB fixture used by tests.
 - **`src/main/index.ts`** - Node process. Owns the window, the IPC handlers (`open-file`, `open-path`, `get-image`, `export-thumbs`, `open-folder`, `copy-text`, `window-action`), single-instance handling, and shell-launch open (file association / context menu / second instance) pushed to the renderer via the `shell-open` channel. `cfb` and `sharp` are Node-only and live here.
-- **`src/preload/index.ts`** - the `contextBridge` API surface (`window.api`). Every renderer↔main call goes through a typed method here; `contextIsolation: true`. This is the IPC contract - keep it in sync with the main handlers.
+- **`src/shared/ipc.ts`** - the typed IPC contract (no Electron/DOM imports; consumed by main, preload, and the contract test). `CHANNELS` (the 9 invoke/handle channel names) + `PUSH` (the 3 main→renderer push names) + the payload/response types (`ThumbMeta`, `OpenResult`/`OpenResponse`, `ExportOpts`, `ExportResponse`, `ExportProgress`, `ThemeChoice`; `SizeMode` re-exported from `core/export.ts`). main and preload both reference the constants so a channel rename is one edit, and tsgo catches payload-type drift. `src/ipc-contract.test.ts` asserts every `CHANNELS` key has a matching `ipcMain.handle` in main (the one gap types can't see). Renderer keeps importing these types from `preload` (which re-exports the contract) - the canonical home is `src/shared/ipc.ts`.
+- **`src/preload/index.ts`** - the `contextBridge` API surface (`window.api`). Every renderer↔main call goes through a typed method here, routed through the `src/shared/ipc.ts` contract; `contextIsolation: true`. `export type Api = typeof api` is the surface the renderer mock (`makeApiMock`) is typed against.
 - **`src/renderer/`** - sandboxed React page. `App.tsx` is the shell; `components/` holds the menubar, grid (`BrowseGrid`), table (`BrowseTable`), preview, export dialog, and vendored `components/ui/` primitives. Thumbnails are **lazily fetched per stream** over IPC (`lib/imageCache.ts`) - the open result carries metadata only, not image bytes, so large DBs stay responsive.
 - **`src/cli/`** - `commander` CLI (`index.ts`, `commands.ts`) calling straight into `src/core`.
 
