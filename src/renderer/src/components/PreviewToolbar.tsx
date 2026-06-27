@@ -67,7 +67,7 @@ export function PreviewToolbar({
   ]
 
   const inlineButton = ({ icon: Icon, label, run }: Control): React.JSX.Element => (
-    <Button key={label} size="sm" variant="outline" className="h-6 shrink-0 px-2" title={label} onClick={run}>
+    <Button key={label} size="sm" variant="outline" className="h-6 shrink-0 px-2" aria-label={label} title={label} onClick={run}>
       <Icon className="h-4 w-4" />
     </Button>
   )
@@ -87,7 +87,7 @@ export function PreviewToolbar({
   return (
     <div ref={barRef} className="flex items-center gap-1.5 overflow-hidden border-t border-border px-3 py-1">
       {collapsed < 2 && zoomControls.map(inlineButton)}
-      <Button size="sm" variant={fit ? 'default' : 'outline'} className="h-6 shrink-0 px-2" title="Fit to window" onClick={onFit}>
+      <Button size="sm" variant={fit ? 'default' : 'outline'} className="h-6 shrink-0 px-2" aria-label="Fit to window" title="Fit to window" onClick={onFit}>
         <Maximize2 className="h-4 w-4" />
       </Button>
       <Button size="sm" variant={one ? 'default' : 'outline'} className="h-6 shrink-0 px-2" title="Actual size (1:1)" onClick={onOne}>

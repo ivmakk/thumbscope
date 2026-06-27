@@ -17,7 +17,8 @@ function createWindow(): void {
     width: 1280,
     height: 860,
     // Floor the window size so the two-panel layout (and the preview control bar at the
-    // panel's 20% minSize) can't be squeezed to clipping at extreme small widths.
+    // preview panel's minimum width) can't be squeezed to clipping at extreme small
+    // widths. The panel minimum is a dynamic ~150px floor computed in the renderer.
     minWidth: 720,
     minHeight: 520,
     show: false,
