@@ -15,6 +15,7 @@
     "build:cli": "node scripts/build-cli.mjs",
     "build:icons": "node scripts/build-icons.mjs",
     "typecheck": "tsgo --noEmit -p tsconfig.node.json && tsgo --noEmit -p tsconfig.web.json",
+    "typecheck:tsc": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "node --test \"src/**/*.test.ts\"",
     "pack:dir": "electron-vite build && npm run build:cli && electron-builder --dir",
     "dist:win": "electron-vite build && npm run build:cli && electron-builder --win",

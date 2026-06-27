@@ -24,7 +24,7 @@ Decided deliberately; don't relitigate without reason.
 
 - `npm run dev` - electron-vite dev server + Electron (renderer HMR).
 - `npm run build` - production build into `out/`. Does **not** type-check.
-- `npm run typecheck` - `tsgo --noEmit` (TypeScript 7 native compiler, `@typescript/native-preview`) for both projects (node + web). Run this separately. `typescript@6` stays installed as the editor/language-service engine.
+- `npm run typecheck` - `tsgo --noEmit` (TypeScript 7 native compiler, `@typescript/native-preview`) for both projects (node + web). Run this separately. `typescript@6` stays installed as the editor/language-service engine; `npm run typecheck:tsc` runs the same check on classic `tsc` (fallback for platforms with no `tsgo` native binary, or if the preview channel breaks).
 - `npm test` - `node --test "src/**/*.test.ts"`.
 - Single test file: `node --test src/core/parser.test.ts`.
 - `npm run cli -- <args>` - run the CLI from source (e.g. `npm run cli -- list sample/Thumbs.db`).
