@@ -1,6 +1,6 @@
 // Electron-free export engine: payload -> JPEG (sharp) + the per-entry write loop.
 // Shared by the GUI main process and the CLI so both produce byte-identical output.
-// sharp is Node-only (not Electron-only) so it lives here; parser.ts/image.ts stay sharp-free.
+// sharp is Node-only (not Electron-only) so it lives here; the core parser stays sharp-free.
 
 import { join } from 'node:path'
 import { writeFile } from 'node:fs/promises'

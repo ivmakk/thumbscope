@@ -76,7 +76,11 @@ async function openPath(path: string, format?: string) {
   try {
     parsed = await openThumbnailDb(path, format ? { format } : undefined)
   } catch (err) {
-    return { error: (err as Error).message, path }
+    // File-IO failures (locked, permission denied, vanished) carry an errno code - wrap them so the user
+    // sees a clear "Could not read file" instead of raw OS text. Parse errors (e.g. NotCfbError) have no
+    // code and keep their own message.
+    const e = err as NodeJS.ErrnoException
+    return { error: e.code ? `Could not read file: ${e.message}` : e.message, path }
   }
   current = { path, entries: new Map(parsed.entries.map((e) => [e.streamName, e])) }
 

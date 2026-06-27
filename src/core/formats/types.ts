@@ -11,7 +11,7 @@ export interface Ctx {
 }
 
 // CFB-family context: the orchestrator runs `CFB.read` once and only enters the registry on success,
-// so `cfb` is always non-null here. Registry handlers carry zero cfb-null branches (design-watch nit 1).
+// so `cfb` is always non-null here. Registry handlers carry zero cfb-null branches.
 export interface CfbCtx extends Ctx {
   cfb: CFB.CFB$Container
 }

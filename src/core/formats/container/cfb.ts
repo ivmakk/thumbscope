@@ -55,9 +55,12 @@ function isThumbStream(name: string): boolean {
 export const cfbHandler: ContainerHandler = {
   slug: 'cfb',
 
-  // Positive signature: a Catalog stream or any digit/hash-named thumb stream is present.
+  // Positive signature: a Catalog stream or any digit/hash-named thumb stream is present. Reads names
+  // off the directory directly (no payload copy) - the streams() helper would copy every stream's bytes.
   detect(ctx: CfbCtx): boolean {
-    return streams(ctx.cfb).some((s) => s.name === 'Catalog' || isThumbStream(s.name))
+    return ctx.cfb.FileIndex.some(
+      (e) => e.type === 2 && e.name.charCodeAt(0) >= 0x20 && (e.name === 'Catalog' || isThumbStream(e.name))
+    )
   },
 
   parse(ctx: CfbCtx): ParseResult {

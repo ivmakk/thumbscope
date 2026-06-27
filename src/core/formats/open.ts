@@ -8,7 +8,7 @@
 //
 // `parseThumbsDb(buffer)` is the sync core preserved as the compat entry the existing tests depend on.
 
-import { open as fsOpen, readFile } from 'node:fs/promises'
+import { open as fsOpen } from 'node:fs/promises'
 import type { ContainerFormat, ParseResult } from '../types.ts'
 import type { CfbCtx } from './types.ts'
 import { readCfb } from './internal/cfbToolkit.ts'
@@ -43,14 +43,16 @@ export function parseThumbsDb(fileBuffer: Buffer, opts?: OpenOptions): ParseResu
 
   const ctx: CfbCtx = { path: '', header: fileBuffer.subarray(0, 16), buffer: fileBuffer, cfb }
 
-  // {format} override forces a named handler and skips detection.
+  // {format} override forces a named handler and skips detection. An explicit override is exact: it
+  // returns whatever the chosen handler produces, with no tier-2 carve fallback (carve stays on the
+  // auto/detection path). This keeps the override useful for debugging - you see the handler's real
+  // result, even when empty, instead of carved output silently masking it.
   if (opts?.format) {
     const forced = registry.find((h) => h.slug === opts.format)
-    // Unknown slug or a forced handler that can't produce entries → clean empty result, never a throw.
-    // The requested slug is echoed back as a debug aid; it isn't a real ContainerFormat, hence the cast.
+    // Unknown slug → clean empty result, never a throw. The requested slug is echoed back as a debug
+    // aid; it isn't a real ContainerFormat, hence the cast.
     if (!forced) return emptyResult(opts.format as ContainerFormat)
-    const result = forced.parse(ctx)
-    return result.count > 0 ? result : carveOr(fileBuffer, result)
+    return forced.parse(ctx)
   }
 
   const handler = registry.find((h) => h.detect(ctx))
@@ -73,14 +75,15 @@ function emptyResult(format: ContainerFormat): ParseResult {
 // check), else reads the buffer and runs the sync core.
 export async function openThumbnailDb(path: string, opts?: OpenOptions): Promise<ParseResult> {
   const fh = await fsOpen(path, 'r')
-  let header: Buffer
   try {
-    header = Buffer.alloc(16)
+    const header = Buffer.alloc(16)
     const { bytesRead } = await fh.read(header, 0, 16, 0)
-    if (bytesRead < 16) header = header.subarray(0, bytesRead)
+    // SQLite is routed by path (DatabaseSync reopens it), so the full buffer is never loaded for it.
+    if (detectSqlite(bytesRead < 16 ? header.subarray(0, bytesRead) : header)) return parseSqlite(path)
+    // OLE2: read the whole file from the same handle (the positional header read left the position at 0),
+    // avoiding a second open/read of the same file.
+    return parseThumbsDb(await fh.readFile(), opts)
   } finally {
     await fh.close()
   }
-  if (detectSqlite(header)) return parseSqlite(path)
-  return parseThumbsDb(await readFile(path), opts)
 }

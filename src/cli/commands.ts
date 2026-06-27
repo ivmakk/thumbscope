@@ -38,7 +38,9 @@ async function load(
     const parsed = await openThumbnailDb(resolved.path, format ? { format } : undefined)
     return { path: resolved.path, entries: sortByIndex(parsed.entries) }
   } catch (err) {
-    return { error: (err as Error).message }
+    // IO errors carry an errno code -> friendly "Could not read file"; parse errors keep their message.
+    const e = err as NodeJS.ErrnoException
+    return { error: e.code ? `Could not read file: ${e.message}` : e.message }
   }
 }
 
