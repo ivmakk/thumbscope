@@ -105,4 +105,5 @@ Classic `Thumbs.db` is an **OLE2 / Compound File Binary** container (magic `D0 C
 - `.db` is not unique to Thumbs.db (SQLite etc.), so do **not** force a default file association on `.db`. Context-menu entries only; association is opt-in in the installer.
 - Keep `src/core` free of Electron/DOM imports.
 - Do not commit automatically - the user commits manually.
-- **Issue linkage**: branch as `feat/<N>-<slug>` (bare number, no `#`). Keep the conventional-commit subject and add `Refs #<N>` in the commit footer + PR body to cross-link without auto-closing. Don't use closing keywords (`Closes/Fixes/Resolves`) - issues are closed manually.
+- **Branches**: `develop` is the integration branch; `main` is the release branch (only updated at release). Cut all feature/fix work off `develop` (not `main`) and target PRs back at `develop`. See `CONTRIBUTING.md`.
+- **Issue linkage**: branch as `feat/<N>-<slug>` (bare number, no `#`) off `develop`. Keep the conventional-commit subject and add `Refs #<N>` in the commit footer + PR body to cross-link without auto-closing. Don't use closing keywords (`Closes/Fixes/Resolves`) - issues are closed manually.
