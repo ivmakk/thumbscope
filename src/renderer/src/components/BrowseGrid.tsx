@@ -2,9 +2,10 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { ThumbMeta } from '../../../preload'
 import { ThumbImage } from './ThumbImage'
+import { FileName } from './FileName'
 import { cn } from '@/lib/utils'
 
-const LABEL_H = 34 // label + dims rows below the image
+const LABEL_H = 38 // label + dims rows below the image
 const GAP = 8
 
 export function BrowseGrid({
@@ -47,6 +48,10 @@ export function BrowseGrid({
 
   useLayoutEffect(() => virt.measure(), [rowH, cols, virt])
 
+  // Reset scroll to top when a new file is opened (version bumps). Keyed on
+  // version only — sort/filter changes (entries) must keep the scroll position.
+  useLayoutEffect(() => virt.scrollToOffset(0), [version, virt])
+
   return (
     <div ref={scrollRef} className="h-full overflow-auto p-2">
       <div style={{ height: virt.getTotalSize(), position: 'relative', width: '100%' }}>
@@ -87,7 +92,7 @@ export function BrowseGrid({
                       className="rounded border border-border object-contain"
                       style={{ width: img, height: img }}
                     />
-                    <span className="w-full truncate text-xs">{e.label}</span>
+                    <FileName label={e.label} className="text-xs" />
                     <span className="text-[10px] text-muted-foreground">
                       {e.width && e.height ? `${e.width}×${e.height}` : '—'} · {e.format}
                     </span>

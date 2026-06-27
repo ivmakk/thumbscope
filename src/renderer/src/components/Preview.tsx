@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Maximize2, RotateCcw, RotateCw, ZoomIn, ZoomOut } from 'lucide-react'
 import type { ThumbMeta } from '../../../preload'
-import { Button } from '@/components/ui/button'
+import { PreviewToolbar } from './PreviewToolbar'
 import { getThumbUrl } from '@/lib/imageCache'
 
 // Remembered zoom mode, persisted across app runs. Manual zoom (wheel/buttons) is transient and
@@ -133,27 +132,15 @@ export function Preview({ entry, version }: { entry: ThumbMeta | null; version: 
           />
         )}
       </div>
-      <div className="flex items-center gap-1.5 border-t border-border px-3 py-1">
-        <Button size="sm" variant="outline" className="h-6 px-2" title="Zoom out" onClick={() => setManualZoom(zoom / 1.25)}>
-          <ZoomOut className="h-4 w-4" />
-        </Button>
-        <Button size="sm" variant="outline" className="h-6 px-2" title="Zoom in" onClick={() => setManualZoom(zoom * 1.25)}>
-          <ZoomIn className="h-4 w-4" />
-        </Button>
-        <Button size="sm" variant={fit ? 'default' : 'outline'} className="h-6 px-2" title="Fit to window" onClick={doFit}>
-          <Maximize2 className="h-4 w-4" />
-        </Button>
-        <Button size="sm" variant={one ? 'default' : 'outline'} className="h-6 px-2" title="Actual size (1:1)" onClick={oneToOne}>
-          1:1
-        </Button>
-        <div className="mx-1 h-4 w-px bg-border" />
-        <Button size="sm" variant="outline" className="h-6 px-2" title="Rotate left" onClick={() => rotate(-90)}>
-          <RotateCcw className="h-4 w-4" />
-        </Button>
-        <Button size="sm" variant="outline" className="h-6 px-2" title="Rotate right" onClick={() => rotate(90)}>
-          <RotateCw className="h-4 w-4" />
-        </Button>
-      </div>
+      <PreviewToolbar
+        fit={fit}
+        one={one}
+        onZoomOut={() => setManualZoom(zoom / 1.25)}
+        onZoomIn={() => setManualZoom(zoom * 1.25)}
+        onFit={doFit}
+        onOne={oneToOne}
+        onRotate={rotate}
+      />
       <div className="truncate border-t border-border px-3 py-1.5 text-xs text-muted-foreground" title={entry.label}>
         {entry.label} · {entry.width && entry.height ? `${entry.width}×${entry.height}` : '—'} · {naturalPct() ?? Math.round(zoom * 100)}%
       </div>
