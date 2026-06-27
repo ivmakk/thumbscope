@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { Maximize2, MoreHorizontal, RotateCcw, RotateCw, ZoomIn, ZoomOut } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 
 // Toolbar overflow steps: level 1 moves rotate into the "..." menu, level 2 also moves zoom.
 const MAX_COLLAPSE = 2
+
+type Control = { icon: LucideIcon; label: string; run: () => void }
 
 export function PreviewToolbar({
   fit,
@@ -33,8 +36,9 @@ export function PreviewToolbar({
   // Priority-ordered overflow: collapse the lowest-priority controls into the "..." menu
   // when the inline row actually overflows (bar is overflow-hidden + buttons shrink-0, so
   // scrollWidth > clientWidth means it doesn't fit), one group at a time - rotate first,
-  // then zoom; fit/1:1 always stay inline.
-  useEffect(() => {
+  // then zoom; fit/1:1 always stay inline. Runs as a layout effect (pre-paint) so the
+  // initial level is settled before the bar is shown, avoiding a clipped flash.
+  useLayoutEffect(() => {
     const el = barRef.current
     if (!el) return
     const measure = (): void => {
@@ -52,18 +56,37 @@ export function PreviewToolbar({
     return () => ro.disconnect()
   }, [collapsed])
 
+  // Declared once so the docked button and the overflow-menu item can't drift apart.
+  const zoomControls: Control[] = [
+    { icon: ZoomOut, label: 'Zoom out', run: onZoomOut },
+    { icon: ZoomIn, label: 'Zoom in', run: onZoomIn }
+  ]
+  const rotateControls: Control[] = [
+    { icon: RotateCcw, label: 'Rotate left', run: () => onRotate(-90) },
+    { icon: RotateCw, label: 'Rotate right', run: () => onRotate(90) }
+  ]
+
+  const inlineButton = ({ icon: Icon, label, run }: Control): React.JSX.Element => (
+    <Button key={label} size="sm" variant="outline" className="h-6 shrink-0 px-2" title={label} onClick={run}>
+      <Icon className="h-4 w-4" />
+    </Button>
+  )
+  // preventDefault keeps the menu open so repeated clicks (e.g. zooming several steps) work.
+  const menuItem = ({ icon: Icon, label, run }: Control): React.JSX.Element => (
+    <DropdownMenuItem
+      key={label}
+      onSelect={(e) => {
+        e.preventDefault()
+        run()
+      }}
+    >
+      <Icon className="h-4 w-4" /> {label}
+    </DropdownMenuItem>
+  )
+
   return (
     <div ref={barRef} className="flex items-center gap-1.5 overflow-hidden border-t border-border px-3 py-1">
-      {collapsed < 2 && (
-        <>
-          <Button size="sm" variant="outline" className="h-6 shrink-0 px-2" title="Zoom out" onClick={onZoomOut}>
-            <ZoomOut className="h-4 w-4" />
-          </Button>
-          <Button size="sm" variant="outline" className="h-6 shrink-0 px-2" title="Zoom in" onClick={onZoomIn}>
-            <ZoomIn className="h-4 w-4" />
-          </Button>
-        </>
-      )}
+      {collapsed < 2 && zoomControls.map(inlineButton)}
       <Button size="sm" variant={fit ? 'default' : 'outline'} className="h-6 shrink-0 px-2" title="Fit to window" onClick={onFit}>
         <Maximize2 className="h-4 w-4" />
       </Button>
@@ -72,14 +95,7 @@ export function PreviewToolbar({
       </Button>
       <div className="mx-1 h-4 w-px shrink-0 bg-border" />
       {collapsed === 0 ? (
-        <>
-          <Button size="sm" variant="outline" className="h-6 shrink-0 px-2" title="Rotate left" onClick={() => onRotate(-90)}>
-            <RotateCcw className="h-4 w-4" />
-          </Button>
-          <Button size="sm" variant="outline" className="h-6 shrink-0 px-2" title="Rotate right" onClick={() => onRotate(90)}>
-            <RotateCw className="h-4 w-4" />
-          </Button>
-        </>
+        rotateControls.map(inlineButton)
       ) : (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -90,21 +106,11 @@ export function PreviewToolbar({
           <DropdownMenuContent align="end">
             {collapsed >= 2 && (
               <>
-                <DropdownMenuItem onSelect={onZoomOut}>
-                  <ZoomOut className="h-4 w-4" /> Zoom out
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={onZoomIn}>
-                  <ZoomIn className="h-4 w-4" /> Zoom in
-                </DropdownMenuItem>
+                {zoomControls.map(menuItem)}
                 <DropdownMenuSeparator />
               </>
             )}
-            <DropdownMenuItem onSelect={() => onRotate(-90)}>
-              <RotateCcw className="h-4 w-4" /> Rotate left
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => onRotate(90)}>
-              <RotateCw className="h-4 w-4" /> Rotate right
-            </DropdownMenuItem>
+            {rotateControls.map(menuItem)}
           </DropdownMenuContent>
         </DropdownMenu>
       )}

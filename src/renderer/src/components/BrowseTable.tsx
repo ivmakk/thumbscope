@@ -1,9 +1,10 @@
-import { useLayoutEffect, useRef } from 'react'
+import { useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import type { ThumbMeta } from '../../../preload'
 import type { SortDir, SortKey } from '@core/view'
 import { FileName } from './FileName'
+import { useResetScrollOnVersion } from '@/lib/useResetScrollOnVersion'
 import { cn } from '@/lib/utils'
 
 const ROW_H = 30
@@ -44,9 +45,7 @@ export function BrowseTable({
     overscan: 10
   })
 
-  // Reset scroll to top when a new file is opened (version bumps). Keyed on
-  // version only — sort/filter changes (entries) must keep the scroll position.
-  useLayoutEffect(() => virt.scrollToOffset(0), [version, virt])
+  useResetScrollOnVersion(virt, version)
 
   const Head = ({ k, label, className }: { k: SortKey; label: string; className?: string }) => (
     <button
@@ -85,7 +84,7 @@ export function BrowseTable({
                 style={{ gridTemplateColumns: COLS, height: ROW_H, transform: `translateY(${vr.start}px)` }}
               >
                 <span className="truncate px-2 text-muted-foreground">{e.index ?? '—'}</span>
-                <span className="flex items-center gap-1.5 px-2">
+                <span className="flex items-center gap-1.5 px-2" title={e.orphan ? `${e.label} — original not found, recoverable` : e.label}>
                   <FileName label={e.label} title={e.orphan ? `${e.label} — original not found, recoverable` : e.label} className="min-w-0" />
                   {e.orphan && <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" title="Original not found — recoverable" />}
                 </span>

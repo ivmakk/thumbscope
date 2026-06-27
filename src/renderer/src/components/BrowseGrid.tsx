@@ -3,6 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import type { ThumbMeta } from '../../../preload'
 import { ThumbImage } from './ThumbImage'
 import { FileName } from './FileName'
+import { useResetScrollOnVersion } from '@/lib/useResetScrollOnVersion'
 import { cn } from '@/lib/utils'
 
 const LABEL_H = 38 // label + dims rows below the image
@@ -48,9 +49,7 @@ export function BrowseGrid({
 
   useLayoutEffect(() => virt.measure(), [rowH, cols, virt])
 
-  // Reset scroll to top when a new file is opened (version bumps). Keyed on
-  // version only — sort/filter changes (entries) must keep the scroll position.
-  useLayoutEffect(() => virt.scrollToOffset(0), [version, virt])
+  useResetScrollOnVersion(virt, version)
 
   return (
     <div ref={scrollRef} className="h-full overflow-auto p-2">
