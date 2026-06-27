@@ -19,6 +19,7 @@ export interface OpenResult {
   failed: number
   catalogCount: number
   recovered: boolean // JPEGs raw-carved from a damaged container; metadata unavailable
+  format: string // container slug the handler resolved (cfb / irfanview-* / sqlite-photothumb / recovered)
   entries: ThumbMeta[]
 }
 
@@ -49,7 +50,9 @@ export interface ExportProgress {
 
 const api = {
   openFile: (): Promise<OpenResponse> => ipcRenderer.invoke('open-file'),
-  openPath: (path: string): Promise<OpenResponse> => ipcRenderer.invoke('open-path', path),
+  // `format` (optional) forces a container handler by slug, skipping detection (manual override).
+  openPath: (path: string, format?: string): Promise<OpenResponse> =>
+    ipcRenderer.invoke('open-path', path, format),
   getImage: (streamName: string): Promise<{ mime: string; bytes: Uint8Array } | null> =>
     ipcRenderer.invoke('get-image', streamName),
   exportThumbs: (opts: ExportOpts): Promise<ExportResponse> =>

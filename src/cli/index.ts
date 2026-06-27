@@ -22,6 +22,7 @@ program
   .option('-f, --filter <substr>', 'only export thumbnails whose name contains this substring')
   .option('--csv', 'also write thumbnails.csv beside the images', false)
   .option('--overwrite', 'overwrite existing same-name files (default: skip them)', false)
+  .option('--format <slug>', 'force a container handler (cfb | irfanview | sqlite-photothumb), skipping detection')
   .action(async (db, opts) => process.exit(await cmdExport(db, opts)))
 
 program
@@ -29,6 +30,7 @@ program
   .description('Print thumbnail metadata (id, dimensions, size, date, name)')
   .argument('<db>', 'path to a Thumbs.db/ehthumbs.db file, or a folder containing one')
   .option('--csv <file>', 'write metadata to a CSV file instead of stdout')
+  .option('--format <slug>', 'force a container handler (cfb | irfanview | sqlite-photothumb), skipping detection')
   .action(async (db, opts) => process.exit(await cmdList(db, opts)))
 
 // Force node-style argv slicing ([exe, script, ...args]). Without this, commander detects

@@ -7,7 +7,7 @@ import { writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import sharp from 'sharp'
 import { targetDimensions, exportFilename, toCsv, type SizeMode, type CsvRow } from './export.ts'
-import { decodeAbbrevRgb } from './jpegAbbrev.ts'
+import { decodeAbbrevRgb } from './formats/codec/abbrevJpeg.ts'
 import type { Payload, ThumbEntry } from './types.ts'
 
 // Encode one parsed payload to JPEG honoring the size mode.
@@ -50,14 +50,6 @@ export async function encodeJpeg(
   const target = targetDimensions(payload.width, payload.height, mode)
   if (target) img.resize(target.width, target.height, { kernel: 'lanczos3' }).sharpen()
   return img.jpeg({ quality }).toBuffer()
-}
-
-// Render a reconstructed abbrev-jpeg JPEG to a browser-displayable PNG. decodeAbbrevRgb returns upright
-// packed RGB (reversed-channel copy, no complement, K ignored, already flipped); sharp just wraps it.
-// Used by get-image.
-export async function renderAbbrevJpeg(data: Buffer): Promise<Buffer> {
-  const rgb = decodeAbbrevRgb(data)
-  return sharp(rgb.pixels, { raw: { width: rgb.width, height: rgb.height, channels: 3 } }).png().toBuffer()
 }
 
 export interface ExportParams {

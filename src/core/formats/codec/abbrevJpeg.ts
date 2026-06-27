@@ -1,3 +1,104 @@
+// Windows XP "abbrev-jpeg" thumbnails: abbreviated 4-component JPEGs (SOI + SOF0 + scan, no DQT/DHT —
+// the OS supplies the tables implicitly). Two halves live here: parse-time *reconstruction* (splice the
+// standard tables around the stream's own SOF + scan to make a decodable JPEG) and display/export-time
+// *decode* (a baseline JPEG decoder that maps the four components straight to RGB the way the reference
+// thumbsviewer tool does). See docs/thumbnail-db-formats.md for the GDI+ derivation.
+
+// --- Detection + reconstruction ------------------------------------------------------------------
+
+// A JPEG whose tables the OS supplies implicitly, so the stream holds only SOI + SOF0 + scan. The frame
+// has four components tagged 'R','G','B','A' (52 47 42 41) but the pixels are an out-of-order CMYK
+// separation. Detect by that exact component signature: a 4-component SOF whose IDs are R,G,B,A —
+// distinct from real CMYK JPEGs (which tag components 1..4 or C,M,Y,K).
+export function isAbbrevJpeg(buf: Buffer): boolean {
+  let i = 2 // skip SOI
+  while (i + 19 < buf.length) {
+    if (buf[i] !== 0xff) {
+      i++
+      continue
+    }
+    const marker = buf[i + 1]
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd9)) {
+      i += 2
+      continue
+    }
+    // A true abbrev-jpeg stream is headerless — the OS supplies tables implicitly. A DQT/DHT before the SOF
+    // means this is a full 4-component JPEG carrying its own tables, not a abbrev-jpeg stream: leave it for
+    // the plain-jpeg path rather than mis-splicing the standard tables over its real ones.
+    if (marker === 0xdb || marker === 0xc4) return false
+    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+      if (buf[i + 9] !== 4) return false // component count
+      // component IDs sit at i+10, +13, +16, +19 (each spec is 3 bytes)
+      return buf[i + 10] === 0x52 && buf[i + 13] === 0x47 && buf[i + 16] === 0x42 && buf[i + 19] === 0x41
+    }
+    const len = (buf[i + 2] << 8) | buf[i + 3]
+    if (len < 2) break
+    i += 2 + len
+  }
+  return false
+}
+
+// Standard JPEG blocks Windows omits from a abbrev-jpeg stream and the OS supplies implicitly. Splicing
+// these around the stream's own SOF + scan yields a decodable JPEG. SOI + APP0(JFIF); the two
+// quantization tables (luminance id 0 + chrominance id 1) — table 0 carries the true Windows values,
+// referenced by every component, so its contents determine the tone; and the standard Annex-K Huffman
+// tables (DC + AC, table 0). The four components are decoded as raw samples and mapped to RGB in
+// reversed channel order (R=c2, G=c1, B=c0, no complement; the 4th/K component ignored) by
+// decodeAbbrevRgb — no Adobe APP14 is needed. The stored image is
+// bottom-up, so the decoder flips vertically. Tables match the reference tool thumbsviewer; the
+// standard JPEG (Annex-K) tables are not copyrightable. Confirmed against real XP samples.
+const ABBREV_SOI_APP0 = Buffer.from('ffd8ffe000104a46494600010101006000600000', 'hex')
+const ABBREV_DQT = Buffer.from(
+  'ffdb004300080606070605080707070909080a0c140d0c0b0b0c1912130f141d1a1f1e1d1a1c1c20242e2720222c231c1c2837292c30313434341f27393d38323c2e333432ffdb0043010909090c0b0c180d0d1832211c213232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232323232',
+  'hex'
+)
+const ABBREV_HUFFMAN = Buffer.from(
+  'ffc4001f0000010501010101010100000000000000000102030405060708090a0bffc400b5100002010303020403050504040000017d01020300041105122131410613516107227114328191a1082342b1c11552d1f02433627282090a161718191a25262728292a3435363738393a434445464748494a535455565758595a636465666768696a737475767778797a838485868788898a92939495969798999aa2a3a4a5a6a7a8a9aab2b3b4b5b6b7b8b9bac2c3c4c5c6c7c8c9cad2d3d4d5d6d7d8d9dae1e2e3e4e5e6e7e8e9eaf1f2f3f4f5f6f7f8f9fa',
+  'hex'
+)
+
+// Reconstruct a decodable JPEG from a abbrev-jpeg stream by splicing the standard tables around its own
+// SOF + scan: SOI+APP0 | DQT | SOF | HUFFMAN | scan. Cheap (a few buffer slices, no pixel work) so it
+// runs at parse time; decodeAbbrevRgb does the actual decode lazily on display/export. Returns null if
+// the stream is malformed.
+export function reconstructAbbrevJpeg(jpg: Buffer): Buffer | null {
+  // Locate the SOF marker by walking the marker chain (the stream is SOI + [maybe segments] + SOF +
+  // SOS + entropy). Don't assume the SOF sits immediately after SOI — isAbbrevJpeg walks it the same way.
+  let i = 2 // skip SOI (sliceJpeg guarantees the buffer starts FF D8 FF)
+  let frameIdx = -1
+  while (i + 4 <= jpg.length) {
+    if (jpg[i] !== 0xff) {
+      i++
+      continue
+    }
+    const marker = jpg[i + 1]
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd9)) {
+      i += 2
+      continue
+    }
+    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+      frameIdx = i
+      break
+    }
+    const len = (jpg[i + 2] << 8) | jpg[i + 3]
+    if (len < 2) return null
+    i += 2 + len
+  }
+  if (frameIdx < 0 || frameIdx + 4 > jpg.length) return null
+  const frameSize = (jpg[frameIdx + 2] << 8) | jpg[frameIdx + 3]
+  const scanIdx = frameIdx + 2 + frameSize
+  if (scanIdx > jpg.length) return null
+  return Buffer.concat([
+    ABBREV_SOI_APP0,
+    ABBREV_DQT,
+    jpg.subarray(frameIdx, scanIdx),
+    ABBREV_HUFFMAN,
+    jpg.subarray(scanIdx)
+  ])
+}
+
+// --- Decode --------------------------------------------------------------------------------------
+
 // Baseline (SOF0) JPEG decoder that returns raw component samples, used only for Windows XP "abbrev-jpeg"
 // thumbnails. These are abbreviated 4-component JPEGs whose pixels are RGB stored in reversed channel
 // order with an unused 4th plane; the correct rendering (matching the reference thumbsviewer tool) is a

@@ -353,7 +353,7 @@ function App(): React.JSX.Element {
               </div>
               <div className="flex items-center gap-3 border-t border-border px-3 py-1.5 text-xs text-muted-foreground">
                 <span className="truncate" title={result.path}>
-                  {previewPos > 0 ? `${previewPos} / ${result.count}` : `${result.count}`} thumbs · {result.failed} failed · {selection.selected.size} selected
+                  {previewPos > 0 ? `${previewPos} / ${result.count}` : `${result.count}`} thumbs · {result.failed} failed · {selection.selected.size} selected · {result.format}
                   {orphanCount > 0 && (
                     <>
                       {' · '}

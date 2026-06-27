@@ -1,10 +1,9 @@
 import { join, dirname } from 'node:path'
-import { readFile, readdir } from 'node:fs/promises'
+import { readdir } from 'node:fs/promises'
 import { app, BrowserWindow, dialog, ipcMain, shell, clipboard, Menu, nativeTheme } from 'electron'
-import { parseThumbsDb } from '../core/parser.ts'
-import { isSqliteFile, parsePhotothumb } from '../core/photothumb.ts'
-import { payloadToImage } from '../core/image.ts'
-import { exportEntries, renderAbbrevJpeg, type ExportSummary } from '../core/encode.ts'
+import { openThumbnailDb } from '../core/formats/open.ts'
+import { decode } from '../core/formats/codec/decode.ts'
+import { exportEntries, type ExportSummary } from '../core/encode.ts'
 import type { SizeMode } from '../core/export.ts'
 import { firstPathArg, resolveDbPath } from '../core/shell.ts'
 import type { ThumbEntry } from '../core/types.ts'
@@ -68,23 +67,14 @@ function toMeta(e: ThumbEntry) {
   }
 }
 
-async function openPath(path: string) {
+async function openPath(path: string, format?: string) {
   const resolved = await resolveDbPath(path)
   if ('error' in resolved) return { ...resolved, path }
   path = resolved.path
-  // Read only the 16-byte header to route by magic; the OLE2 path reads the full buffer, the SQLite
-  // path reopens by path inside parsePhotothumb (so no whole-file read just to discard it).
-  let sqlite: boolean
-  let buf: Buffer | null = null
-  try {
-    sqlite = await isSqliteFile(path)
-    if (!sqlite) buf = await readFile(path)
-  } catch (err) {
-    return { error: `Could not read file: ${(err as Error).message}`, path }
-  }
+  // openThumbnailDb handles container detection (SQLite header-routed by path; OLE2 read + sync core).
   let parsed
   try {
-    parsed = sqlite ? parsePhotothumb(path) : parseThumbsDb(buf!)
+    parsed = await openThumbnailDb(path, format ? { format } : undefined)
   } catch (err) {
     return { error: (err as Error).message, path }
   }
@@ -112,6 +102,7 @@ async function openPath(path: string) {
     failed: parsed.failed,
     catalogCount: parsed.catalogCount,
     recovered: parsed.recovered,
+    format: parsed.format, // container slug (cfb / irfanview-* / sqlite-photothumb / recovered)
     entries: parsed.entries.map((e) => ({ ...toMeta(e), orphan: isOrphan(e) }))
   }
 }
@@ -130,20 +121,17 @@ async function openViaDialog() {
 
 ipcMain.handle('open-file', openViaDialog)
 
-ipcMain.handle('open-path', (_e, path: string) => openPath(path))
+ipcMain.handle('open-path', (_e, path: string, format?: string) => openPath(path, format))
 
 ipcMain.handle('get-image', async (_e, streamName: string) => {
   const entry = current?.entries.get(streamName)
   if (!entry) return null
-  if (entry.payload.kind === 'abbrev-jpeg') {
-    try {
-      return { mime: 'image/png', bytes: await renderAbbrevJpeg(entry.payload.data) } // abbrev-jpeg decode -> PNG
-    } catch {
-      return null // subsampled/non-baseline decode throws -> entry lists without an image
-    }
+  try {
+    const img = await decode(entry.payload) // total over all payload kinds; abbrev rendered to PNG
+    return { mime: img.mime, bytes: img.bytes } // Buffer -> Uint8Array over IPC
+  } catch {
+    return null // abbrev subsampled/non-baseline decode throws -> entry lists without an image
   }
-  const img = payloadToImage(entry.payload)
-  return { mime: img.mime, bytes: img.data } // Buffer -> Uint8Array over IPC
 })
 
 interface ExportOpts {

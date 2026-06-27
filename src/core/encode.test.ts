@@ -3,10 +3,9 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import sharp from 'sharp'
-import { encodeJpeg, renderAbbrevJpeg } from './encode.ts'
-import { payloadToImage } from './image.ts'
+import { encodeJpeg } from './encode.ts'
 import { parseThumbsDb } from './parser.ts'
-import { decodeAbbrevRgb } from './jpegAbbrev.ts'
+import { decodeAbbrevRgb } from './formats/codec/abbrevJpeg.ts'
 import { buildAbbrevJpegDb, buildHashedPngDb } from './fixture.ts'
 import type { Payload } from './types.ts'
 
@@ -19,21 +18,6 @@ function cmykPayload(): { payload: Payload; width: number; height: number } {
   assert.ok(e && e.payload.kind === 'abbrev-jpeg')
   return { payload: e.payload, width: e.width as number, height: e.height as number }
 }
-
-test('renderAbbrevJpeg returns a PNG of the source dimensions with the decoded color', async () => {
-  const { payload } = cmykPayload()
-  assert.ok(payload.kind === 'abbrev-jpeg')
-  const png = await renderAbbrevJpeg(payload.data)
-  const meta = await sharp(png).metadata()
-  assert.strictEqual(meta.format, 'png')
-  assert.strictEqual(meta.width, 16)
-  assert.strictEqual(meta.height, 16)
-  const { data } = await sharp(png).raw().toBuffer({ resolveWithObject: true })
-  // index 1 components [c0,c1,c2] = [60,40,150] -> R=c2=150, G=c1=40, B=c0=60.
-  assert.ok(Math.abs(data[0] - 150) <= 2, 'R')
-  assert.ok(Math.abs(data[1] - 40) <= 2, 'G')
-  assert.ok(Math.abs(data[2] - 60) <= 2, 'B')
-})
 
 test('encodeJpeg on a abbrev-jpeg payload returns a valid JPEG at original size', async () => {
   const { payload, width, height } = cmykPayload()
@@ -62,14 +46,6 @@ function pngPayload(): { payload: Payload; width: number; height: number } {
   assert.ok(e && e.payload.kind === 'png')
   return { payload: e.payload, width: e.width as number, height: e.height as number }
 }
-
-test('payloadToImage on a png payload returns the bytes as image/png passthrough', () => {
-  const { payload } = pngPayload()
-  const img = payloadToImage(payload)
-  assert.strictEqual(img.mime, 'image/png')
-  assert.ok(payload.kind === 'png')
-  assert.strictEqual(img.data, payload.data) // passthrough, no copy
-})
 
 test('encodeJpeg on a png payload returns a valid JPEG at original size', async () => {
   const { payload, width, height } = pngPayload()

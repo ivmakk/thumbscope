@@ -3,9 +3,9 @@ import assert from 'node:assert'
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { parseThumbsDb, NotCfbError } from './parser.ts'
-import { decodeAbbrevRgb } from './jpegAbbrev.ts'
+import { decodeAbbrevRgb } from './formats/codec/abbrevJpeg.ts'
 import { buildThumbsDb, buildEhThumbsDb, buildGuidDb, buildVistaDb, buildHashedPngDb, buildIrfanThumbsDb, buildIrfanNestedThumbsDb, buildAbbrevJpegDb } from './fixture.ts'
-import { dibToBmp } from './image.ts'
+import { dibToBmp } from './formats/codec/dib.ts'
 
 test('parses all thumbnails from a synthetic Thumbs.db', () => {
   const r = parseThumbsDb(buildThumbsDb())
