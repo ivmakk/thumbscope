@@ -106,6 +106,35 @@ test('cmdExport: non-CFB input exits 1, no crash', async () => {
   await rm(dir, { recursive: true, force: true })
 })
 
+test('cmdExport --format cfb forces the cfb handler and exports normally', async () => {
+  const dir = await tmp()
+  const db = join(dir, 'Thumbs.db')
+  await writeFile(db, buildThumbsDb())
+  const out = join(dir, 'out')
+
+  const { code, err } = await capture(() =>
+    cmdExport(db, { out, mode: 'original', quality: '80', csv: false, overwrite: false, format: 'cfb' })
+  )
+  assert.equal(code, 0)
+  assert.match(err, /3 exported/)
+
+  await rm(dir, { recursive: true, force: true })
+})
+
+test('cmdExport --format with an unknown slug errors out, exit 1', async () => {
+  const dir = await tmp()
+  const db = join(dir, 'Thumbs.db')
+  await writeFile(db, buildThumbsDb())
+
+  const { code, err } = await capture(() =>
+    cmdExport(db, { out: join(dir, 'o'), mode: 'original', quality: '80', csv: false, overwrite: false, format: 'no-such' })
+  )
+  assert.equal(code, 1)
+  assert.match(err, /Unknown --format handler/)
+
+  await rm(dir, { recursive: true, force: true })
+})
+
 test('cmdList --csv writes header + one row per thumbnail; accepts a folder', async () => {
   const dir = await tmp()
   await writeFile(join(dir, 'Thumbs.db'), buildThumbsDb())

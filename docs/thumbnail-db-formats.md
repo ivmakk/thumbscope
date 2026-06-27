@@ -1,6 +1,6 @@
 # Thumbnail database formats - reference
 
-Format specs for everything Thumbscope reads, plus reference notes on a format it doesn't read yet. `CLAUDE.md` carries the variant taxonomy and the standing parser rules; **read this doc before editing `parser.ts` or `jpegAbbrev.ts`.** Split into per-format docs later if it grows too large.
+Format specs for everything Thumbscope reads, plus reference notes on a format it doesn't read yet. `CLAUDE.md` carries the variant taxonomy and the standing parser rules; **read this doc before editing `formats/open.ts`, the container handlers, or `formats/codec/abbrevJpeg.ts`.** Split into per-format docs later if it grows too large.
 
 ## Formats
 
@@ -23,7 +23,7 @@ Supporting sections: [1.1 Container basics](#11-container-basics), [1.8 DIB payl
 
 # 1. OLE2 `Thumbs.db` family (supported)
 
-Deep forensic detail for the OLE2 `Thumbs.db` / `ehthumbs.db` / `ivThumbs.db` family that `src/core/parser.ts` parses.
+Deep forensic detail for the OLE2 `Thumbs.db` / `ehthumbs.db` / `ivThumbs.db` family that `src/core/formats/` parses (orchestrator `open.ts` + the `container/` handlers).
 
 ## 1.1. Container basics
 
@@ -36,7 +36,7 @@ Thumbnail payloads are a plain JPEG or a JPEG behind a small Microsoft "thumbstr
 
 The (gitignored) corpus in `tests/fixtures/real/` has a real sample of each variant below.
 
-> **Naming.** None of these variant names are official - Microsoft never documented the `Thumbs.db` internals. The **slug** (e.g. `catalog-jpeg`) is the project's canonical key; it supersedes the former ambiguous `A`/`B`/`C`/`Type 1` labels. Code identifiers for the `abbrev-jpeg` variant use the `Abbrev` stem (`jpegAbbrev.ts`, `decodeAbbrevRgb`, `reconstructAbbrevJpeg`, `isAbbrevJpeg`).
+> **Naming.** None of these variant names are official - Microsoft never documented the `Thumbs.db` internals. The **slug** (e.g. `catalog-jpeg`) is the project's canonical key; it supersedes the former ambiguous `A`/`B`/`C`/`Type 1` labels. Code identifiers for the `abbrev-jpeg` variant use the `Abbrev` stem (`formats/codec/abbrevJpeg.ts`, `decodeAbbrevRgb`, `reconstructAbbrevJpeg`, `isAbbrevJpeg`).
 
 ## 1.2. Classic JPEG (Win2000/XP) - `catalog-jpeg`
 
@@ -94,7 +94,7 @@ Same container shape as `hashed-jpeg` (OLE2, **no Catalog**, stream names `<size
 
 # 2. `thumbcache_*.db` (CMMM) - not supported
 
-> **Scope note:** A *different* format from the OLE2 family above. `thumbcache_*.db` is the per-user Windows Explorer thumbnail cache and is **not OLE2**. It is **not supported today** - kept here as reference if/when adding support. It does not describe the current `src/core/parser.ts` input.
+> **Scope note:** A *different* format from the OLE2 family above. `thumbcache_*.db` is the per-user Windows Explorer thumbnail cache and is **not OLE2**. It is **not supported today** - kept here as reference if/when adding support. It does not describe the current `src/core/formats/` input.
 
 Source: libyal/libwtcdb - [Windows Explorer Thumbnail Cache database format](https://github.com/libyal/libwtcdb/blob/main/documentation/Windows%20Explorer%20Thumbnail%20Cache%20database%20format.asciidoc). That spec is the authoritative reference; consult it (not this summary) before implementing.
 
@@ -114,7 +114,7 @@ Thumbnails are identified by a **ThumbnailCacheId** - a 64-bit value, stored as 
 **Location.** Windows 2000/ME/XP wrote a hidden per-folder `Thumbs.db` (plus `ehthumbs.db` for media) into every folder browsed. Vista moved the cache **out of the photo folders into one per-user store** (`%LocalAppData%\Microsoft\Windows\Explorer\`), fixing the privacy/clutter problem of `Thumbs.db` leaking filenames and thumbnails into shared folders. `Thumbs.db` is **not fully retired**, though: Vista+ still writes it to **network / remote / removable** locations (local NTFS uses the central cache), which is why modern `Thumbs.db` samples still appear - and they use a newer internal layout (`hashed-jpeg` above). The behavior is controllable via the GPO "Turn off the caching of thumbnails in hidden thumbs.db files."
 
 **Two distinct lineages.** Don't conflate them:
-- The `Thumbs.db` container itself evolved: XP "classic" OLE2 with a `Catalog` stream + digit-reversed numbered streams and real UTF-16 filenames → Vista/7 "modern" OLE2 with **no Catalog** and streams named `<size>_<hash>` (DIB/JPEG payloads). **Both are OLE2 and both are already handled by `src/core/parser.ts`** (`catalog-jpeg`/`catalog-jpeg-guid` and `hashed-jpeg`).
+- The `Thumbs.db` container itself evolved: XP "classic" OLE2 with a `Catalog` stream + digit-reversed numbered streams and real UTF-16 filenames → Vista/7 "modern" OLE2 with **no Catalog** and streams named `<size>_<hash>` (DIB/JPEG payloads). **Both are OLE2 and both are already handled by the cfb container handler (`src/core/formats/container/cfb.ts`)** (`catalog-jpeg`/`catalog-jpeg-guid` and `hashed-jpeg`).
 - `thumbcache_*.db` (this section) is a **separate, non-OLE2 format** - a flat `CMMM` cache stream. It is **not** handled today and needs its own code path.
 
 ## 2.3. Signatures
@@ -190,7 +190,7 @@ CREATE TABLE thumb(
 Each `image` blob is a standard JFIF JPEG (`FF D8 FF E0 … JFIF`) and decodes directly. Mapping to `ThumbEntry`:
 
 - `name` / `label` = `fname` (`name` is `null` and `label` a positional `#n` when `fname` is missing). `streamName` is a **synthesized unique key** for the renderer's per-stream `Map`: `fname` is the table's primary key, but SQLite permits NULL/duplicate values in a non-INTEGER PK, so an empty or repeated `fname` falls back to a positional `row-n` / `#n`-suffixed id rather than colliding.
-- `payload` = `jpeg` passthrough. The blob is run through `sliceJpeg` for safety (trims any prefix/trailing junk, though the sampled blobs are clean JPEGs), then `payloadToImage` returns `image/jpeg` as-is; export re-encodes via sharp.
+- `payload` = `jpeg` passthrough. The blob is run through `sliceJpeg` for safety (trims any prefix/trailing junk, though the sampled blobs are clean JPEGs), then `decode` (`formats/codec/decode.ts`) returns `image/jpeg` as-is; export re-encodes via sharp.
 - `width` / `height` = the **thumbnail's own** SOF dimensions (via `jpegDimensions`), matching every other variant - **not** the `width`/`height` columns, which describe the original photo (e.g. 3240x4320) at a different scale. The original-dimension and `fsize` columns are not surfaced today.
 - `date` = `tmodify` (original file mtime, Unix seconds → `Date`), matching the catalog-date semantics of classic `Thumbs.db` (the original file's date, not the cache-write time in `tcreate`).
 

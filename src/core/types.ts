@@ -16,12 +16,22 @@ export interface ThumbEntry {
   payload: Payload
 }
 
+// Container format that produced a ParseResult. Distinct from a handler slug: one handler can emit
+// several formats (the irfanview handler returns irfanview-flat or irfanview-nested).
+export type ContainerFormat =
+  | 'cfb'
+  | 'irfanview-flat'
+  | 'irfanview-nested'
+  | 'sqlite-photothumb'
+  | 'recovered'
+
 export interface ParseResult {
   count: number
   failed: number
   catalogCount: number
   entries: ThumbEntry[]
   recovered: boolean // true when the CFB container was unreadable and JPEGs were raw-carved (no metadata)
+  format: ContainerFormat
 }
 
 export interface CatalogEntry {

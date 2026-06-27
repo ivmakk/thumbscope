@@ -2,31 +2,17 @@
 // container but a SQLite 3 database: a single `thumb(fname, tcreate, tmodify, fsize, width, height,
 // image)` table whose `image` blob is a complete JFIF JPEG. Read with Node's built-in `node:sqlite`
 // (zero deps). DatabaseSync opens a path, not a buffer, so parsePhotothumb takes the file path; the
-// call sites (main / CLI) route here via isSqliteFile(path) — reading just the 16-byte header so the
-// OLE2 path isn't loaded into memory for a magic check — like cfb routes OLE2.
+// orchestrator (formats/open.ts) header-routes to it via container/sqlite.ts (detectSqlite/parseSqlite)
+// — reading just the 16-byte header so the OLE2 path isn't loaded into memory for a magic check.
 import { DatabaseSync } from 'node:sqlite'
-import { open } from 'node:fs/promises'
 import type { ParseResult, ThumbEntry } from './types'
-import { jpegDimensions, sliceJpeg } from './parser.ts'
+import { jpegDimensions, sliceJpeg } from './formats/codec/jpeg.ts'
 
 // "SQLite format 3\0" — the fixed 16-byte header every SQLite 3 file starts with.
 const SQLITE_MAGIC = Buffer.from('53514c69746520666f726d6174203300', 'hex')
 
 export function isSqlite(buf: Buffer): boolean {
   return buf.length >= 16 && buf.subarray(0, 16).equals(SQLITE_MAGIC)
-}
-
-// Test the SQLite magic by reading just the 16-byte header, so the OLE2 path doesn't load a whole
-// SQLite cache into memory only to discard it (DatabaseSync reopens the file by path regardless).
-export async function isSqliteFile(path: string): Promise<boolean> {
-  const fh = await open(path, 'r')
-  try {
-    const buf = Buffer.alloc(16)
-    const { bytesRead } = await fh.read(buf, 0, 16, 0)
-    return bytesRead >= 16 && isSqlite(buf)
-  } finally {
-    await fh.close()
-  }
 }
 
 interface ThumbRow {
@@ -98,7 +84,7 @@ export function parsePhotothumb(path: string): ParseResult {
     }
 
     entries.sort((a, b) => a.streamName.localeCompare(b.streamName))
-    return { count: entries.length, failed, catalogCount: 0, entries, recovered: false }
+    return { count: entries.length, failed, catalogCount: 0, entries, recovered: false, format: 'sqlite-photothumb' }
   } finally {
     db.close()
   }

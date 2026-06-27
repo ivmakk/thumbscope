@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { decodeAbbrevRgb } from './jpegAbbrev.ts'
+import { decodeAbbrevRgb } from './formats/codec/abbrevJpeg.ts'
 import { parseThumbsDb } from './parser.ts'
 import { buildAbbrevJpegDb } from './fixture.ts'
 

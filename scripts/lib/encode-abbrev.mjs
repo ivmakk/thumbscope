@@ -1,5 +1,5 @@
 // Baseline JPEG encoder that produces a Windows XP "abbrev-jpeg" thumbnail stream — the inverse of
-// src/core/jpegAbbrev.ts. Used only by the sample generator (scripts/make-sample-thumbsdb.mjs) to
+// src/core/formats/codec/abbrevJpeg.ts. Used only by the sample generator (scripts/make-sample-thumbsdb.mjs) to
 // build a committed, photo-realistic sample/Thumbs-winxp.db; it is not part of the shipped app.
 //
 // Output shape matches a real XP stream: SOI + SOF0 (four components tagged R,G,B,A, all 1x1, all
@@ -12,7 +12,7 @@
 // (the decoder ignores it). The image is stored bottom-up (the decoder flips vertically), so JPEG
 // raster row y holds source row (h-1-y).
 //
-// The quant + Huffman tables below mirror ABBREV_DQT / ABBREV_HUFFMAN in src/core/parser.ts (standard
+// The quant + Huffman tables below mirror ABBREV_DQT / ABBREV_HUFFMAN in src/core/formats/codec/abbrevJpeg.ts (standard
 // JPEG Annex-K tables — not copyrightable); they are duplicated so this script stays self-contained.
 
 const ZIGZAG = [
