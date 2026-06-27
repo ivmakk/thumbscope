@@ -131,7 +131,7 @@ Node 24 strips TypeScript types natively, so the `.ts` test files run directly w
 npm run typecheck
 ```
 
-Runs `tsc --noEmit` for both the node and web projects. `npm run build` does **not** type-check - run this separately.
+Runs `tsgo --noEmit` (the TypeScript 7 native compiler, `@typescript/native-preview`) for both the node and web projects. `npm run build` does **not** type-check - run this separately.
 
 ### 3.7. Building & packaging
 
