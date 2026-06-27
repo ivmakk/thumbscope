@@ -16,6 +16,7 @@
     "verbatimModuleSyntax": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
+    "types": ["vitest/globals", "@testing-library/jest-dom", "node"],
     "paths": {
       "@/*": ["./src/renderer/src/*"],
       "@core/*": ["./src/core/*"]
@@ -24,6 +25,8 @@
   "include": [
     "src/renderer/src/**/*.ts",
     "src/renderer/src/**/*.tsx",
-    "src/preload/**/*.d.ts"
+    "src/renderer/test/**/*.ts",
+    "src/preload/**/*.d.ts",
+    "src/shared/**/*.ts"
   ]
 }

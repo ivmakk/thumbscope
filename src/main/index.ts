@@ -4,9 +4,10 @@ import { app, BrowserWindow, dialog, ipcMain, shell, clipboard, Menu, nativeThem
 import { openThumbnailDb } from '../core/formats/open.ts'
 import { decode } from '../core/formats/codec/decode.ts'
 import { exportEntries, type ExportSummary } from '../core/encode.ts'
-import type { SizeMode } from '../core/export.ts'
 import { firstPathArg, resolveDbPath } from '../core/shell.ts'
 import type { ThumbEntry } from '../core/types.ts'
+import { CHANNELS, PUSH } from '../shared/ipc.ts'
+import type { ExportOpts, ThemeChoice } from '../shared/ipc.ts'
 
 // Cache the last parsed file so the renderer can lazily pull image bytes per stream (no base64 up front).
 let current: { path: string; entries: Map<string, ThumbEntry> } | null = null
@@ -51,7 +52,7 @@ async function openPathToWindow(path: string): Promise<void> {
   const win = mainWindow
   if (!win) return
   const result = await openPath(path)
-  const send = (): void => win.webContents.send('shell-open', result)
+  const send = (): void => win.webContents.send(PUSH.shellOpen, result)
   if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send)
   else send()
   if (win.isMinimized()) win.restore()
@@ -128,11 +129,11 @@ async function openViaDialog() {
   return openPath(r.filePaths[0])
 }
 
-ipcMain.handle('open-file', openViaDialog)
+ipcMain.handle(CHANNELS.openFile, openViaDialog)
 
-ipcMain.handle('open-path', (_e, path: string, format?: string) => openPath(path, format))
+ipcMain.handle(CHANNELS.openPath, (_e, path: string, format?: string) => openPath(path, format))
 
-ipcMain.handle('get-image', async (_e, streamName: string) => {
+ipcMain.handle(CHANNELS.getImage, async (_e, streamName: string) => {
   const entry = current?.entries.get(streamName)
   if (!entry) return null
   try {
@@ -143,16 +144,7 @@ ipcMain.handle('get-image', async (_e, streamName: string) => {
   }
 })
 
-interface ExportOpts {
-  streamNames: string[] | null // null = all entries
-  mode: SizeMode
-  quality: number
-  includeCsv: boolean
-  skipExisting: boolean
-  toSourceFolder: boolean
-}
-
-ipcMain.handle('export-thumbs', async (e, opts: ExportOpts) => {
+ipcMain.handle(CHANNELS.exportThumbs, async (e, opts: ExportOpts) => {
   if (!current) return { error: 'No file open' }
   let outDir: string
   if (opts.toSourceFolder) {
@@ -179,25 +171,25 @@ ipcMain.handle('export-thumbs', async (e, opts: ExportOpts) => {
       skipExisting: opts.skipExisting,
       includeCsv: opts.includeCsv
     },
-    (done, total) => e.sender.send('export-progress', { done, total })
+    (done, total) => e.sender.send(PUSH.exportProgress, { done, total })
   )
   return summary
 })
 
-ipcMain.handle('open-folder', (_e, path: string) => shell.openPath(path))
+ipcMain.handle(CHANNELS.openFolder, (_e, path: string) => shell.openPath(path))
 
-ipcMain.handle('copy-text', (_e, text: string) => clipboard.writeText(text))
+ipcMain.handle(CHANNELS.copyText, (_e, text: string) => clipboard.writeText(text))
 
 // Theme: renderer owns the choice (persisted in localStorage); main holds the OS source of truth.
 // 'system' lets nativeTheme follow the OS and fire 'updated' on OS changes (the auto-detect piece).
-ipcMain.handle('set-theme', (_e, source: 'system' | 'light' | 'dark') => {
+ipcMain.handle(CHANNELS.setTheme, (_e, source: ThemeChoice) => {
   nativeTheme.themeSource = source
   return nativeTheme.shouldUseDarkColors
 })
-ipcMain.handle('get-theme', () => nativeTheme.shouldUseDarkColors)
+ipcMain.handle(CHANNELS.getTheme, () => nativeTheme.shouldUseDarkColors)
 
 // Window/View actions driven by the custom in-renderer menubar (the native menu is disabled).
-ipcMain.handle('window-action', (e, action: string) => {
+ipcMain.handle(CHANNELS.windowAction, (e, action: string) => {
   const win = BrowserWindow.fromWebContents(e.sender)
   if (!win) return
   const wc = win.webContents
@@ -233,7 +225,7 @@ if (!app.requestSingleInstanceLock()) {
     createWindow()
     // OS theme change while running (only fires when themeSource = 'system'): push to renderer for live flip.
     nativeTheme.on('updated', () =>
-      mainWindow?.webContents.send('theme-updated', nativeTheme.shouldUseDarkColors)
+      mainWindow?.webContents.send(PUSH.themeUpdated, nativeTheme.shouldUseDarkColors)
     )
     // Launched with a file/folder path (file association or context menu)? Open it directly.
     const launchPath = firstPathArg(process.argv.slice(1))
