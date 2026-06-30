@@ -30,4 +30,9 @@ export class GridScreen {
     const label = await this.cell(i).locator('span').last().innerText()
     return label.split('·').pop()!.trim()
   }
+
+  // The clean entry labels (cell `title` attr = `e.label` exactly), in render order.
+  async labels(): Promise<string[]> {
+    return (await this.cells().evaluateAll((els) => els.map((e) => e.getAttribute('title') ?? ''))) as string[]
+  }
 }

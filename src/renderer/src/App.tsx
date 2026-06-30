@@ -263,7 +263,7 @@ function App(): React.JSX.Element {
             </SelectTrigger>
             <SelectContent>
               {SORT_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value}>
+                <SelectItem key={o.value} value={o.value} data-testid={`sort-${o.value}`}>
                   <span className="flex items-center gap-2">
                     <span className="w-12">{o.label}</span>
                     {o.dir === 'asc' ? (
