@@ -75,7 +75,7 @@ export function BrowseTable({
               <div
                 key={e.streamName}
                 data-testid="table-row"
-                aria-selected={isSel}
+                data-selected={isSel}
                 onClick={(ev) => onClick(e, { shift: ev.shiftKey, ctrl: ev.ctrlKey || ev.metaKey })}
                 className={cn(
                   'absolute left-0 grid w-full cursor-default items-center border-b border-border text-sm',

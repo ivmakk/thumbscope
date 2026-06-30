@@ -1,7 +1,7 @@
 import type { Locator, Page } from '@playwright/test'
 
 // The left-panel virtualized table (`BrowseTable`). Rows carry `data-testid="table-row"`
-// and `aria-selected`; only top-run rows are in the DOM, so `.nth(i)` maps to entry i
+// and `data-selected`; only top-run rows are in the DOM, so `.nth(i)` maps to entry i
 // while scrolled to top.
 export class TableScreen {
   constructor(private page: Page) {}
@@ -9,6 +9,7 @@ export class TableScreen {
   rows(): Locator {
     return this.page.getByTestId('table-row')
   }
+
 
   row(i: number): Locator {
     return this.rows().nth(i)
@@ -31,6 +32,6 @@ export class TableScreen {
   }
 
   async isSelected(i: number): Promise<boolean> {
-    return (await this.row(i).getAttribute('aria-selected')) === 'true'
+    return (await this.row(i).getAttribute('data-selected')) === 'true'
   }
 }

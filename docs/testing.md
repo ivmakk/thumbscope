@@ -70,7 +70,7 @@ Three spec files, split by what a red result tells you:
 
 Specs talk to the app through screen objects, not raw locators. Each object in `e2e/screens/` wraps one surface (the grid, the preview, the menubar, the export dialog, the table, the toolbar, the status bar) and exposes intent-level methods like `waitForThumbnails()` or `openExport()`. The objects are injected as Playwright fixtures from `e2e/fixtures.ts`, so a spec never calls `new` on one. When a selector changes, you fix it in one screen object instead of across every spec.
 
-Stable hooks are `data-testid` attributes (`thumb-cell`, `preview-image`, `recovery-banner`, `table-row`, `sort-<key>:<dir>`) plus the `aria-selected` render signal on grid cells and table rows. Everything else uses accessible roles and names through `getByRole`. Reach for a testid only when there is no stable role or text.
+Stable hooks are `data-testid` attributes (`thumb-cell`, `preview-image`, `recovery-banner`, `table-row`, `sort-<key>:<dir>`) plus the `data-selected` render signal on grid cells and table rows. Everything else uses accessible roles and names through `getByRole`. Reach for a testid only when there is no stable role or text.
 
 The fixtures isolate each launch: a fresh `--user-data-dir` per app, and a temp copy of the sample when a test exports, so the committed sample files are never written to.
 

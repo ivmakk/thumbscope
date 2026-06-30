@@ -97,7 +97,7 @@ test.describe('sort + keyboard', () => {
     // Keyboard menubar: Edit > Select All via focus + arrows/enter (no pointer).
     await menubar.selectAllViaKeyboard()
     expect(await statusbar.selectedCount()).toBe(await statusbar.totalCount())
-    const sel = await grid.cells().evaluateAll((els) => els.map((e) => e.getAttribute('aria-selected')))
+    const sel = await grid.cells().evaluateAll((els) => els.map((e) => e.getAttribute('data-selected')))
     expect(sel.every((v) => v === 'true')).toBe(true)
   })
 })
