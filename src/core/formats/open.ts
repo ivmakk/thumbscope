@@ -58,7 +58,17 @@ export function parseThumbsDb(fileBuffer: Buffer, opts?: OpenOptions): ParseResu
   const handler = registry.find((h) => h.detect(ctx))
   if (!handler) return carveOr(fileBuffer, emptyResult('cfb'))
   const result = handler.parse(ctx)
-  return result.count > 0 ? result : carveOr(fileBuffer, result)
+  if (result.count === 0) return carveOr(fileBuffer, result)
+  // Partial-failure rescue: when cfb can't walk a damaged chain it leaves streams blank (failed>0) while
+  // the raw payloads survive in the buffer. If carving beats the handler, prefer the fuller carved set.
+  // Gated to catalog-less formats so a named (catalog) file with a stray failed entry keeps its metadata.
+  // carveFallback is JPEG-first, so it can only safely improve a JPEG-family result - skip a hashed-png
+  // result, where a stray carved JPEG run could otherwise replace the real PNG payloads.
+  if (result.failed > 0 && result.catalogCount === 0 && !result.entries.some((e) => e.payload.kind === 'png')) {
+    const carved = carveFallback(fileBuffer)
+    if (carved.count > result.count) return carved
+  }
+  return result
 }
 
 // Tier-2: carve the whole buffer; fall back to the given zero-entry result when nothing carves.

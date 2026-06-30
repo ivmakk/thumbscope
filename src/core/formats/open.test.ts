@@ -14,7 +14,9 @@ import {
   buildHashedPngDb,
   buildAbbrevJpegDb,
   buildIrfanThumbsDb,
-  buildIrfanNestedThumbsDb
+  buildIrfanNestedThumbsDb,
+  buildPartialHashedDb,
+  buildPartialCatalogDb
 } from '../fixture.ts'
 
 // Each committed fixture buffer + the container format it should resolve to.
@@ -70,6 +72,25 @@ test('tier-2 carve recovers raw JPEGs from a non-OLE2 buffer', () => {
 
 test('tier-2: an all-zero buffer throws NotCfbError', () => {
   assert.throws(() => parseThumbsDb(Buffer.alloc(4096, 0)), NotCfbError)
+})
+
+// Partial-failure rescue: a catalog-less parse that skips streams (failed>0) yields to the carved set
+// when carving recovers strictly more thumbnails - covers damaged containers cfb half-reads.
+test('partial-read rescue: catalog-less parse prefers the fuller carved set', () => {
+  const r = parseThumbsDb(buildPartialHashedDb())
+  assert.strictEqual(r.format, 'recovered')
+  assert.strictEqual(r.recovered, true)
+  assert.strictEqual(r.count, 2) // carve found both JPEGs; the handler decoded only one
+})
+
+// The rescue is gated to catalog-less formats: a named (catalog) file keeps its metadata even with a
+// failed entry and a richer carve. Removing the catalogCount guard fails this test.
+test('partial-read rescue stays off for catalog formats (metadata preserved)', () => {
+  const r = parseThumbsDb(buildPartialCatalogDb())
+  assert.strictEqual(r.format, 'cfb')
+  assert.strictEqual(r.recovered, false)
+  assert.strictEqual(r.count, 1)
+  assert.strictEqual(r.entries[0].name, 'GOOD.JPG')
 })
 
 // Async/path tier: SQLite is header-routed (not a registry peer); OLE2 goes through the sync core.

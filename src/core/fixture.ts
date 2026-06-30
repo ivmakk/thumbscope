@@ -236,6 +236,38 @@ export function buildVistaDb(): Buffer {
   return Buffer.from(CFB.write(cfb, { type: 'buffer' }) as Uint8Array)
 }
 
+// A JPEG run (SOI..EOI) padded past the carver's 256-byte floor, so carving actually keeps it.
+const CARVEABLE_JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(300, 0x20), Buffer.from([0xff, 0xd9])])
+
+// Partial-read failure, catalog-less. One hashed thumb stream decodes, a second is unreadable (garbage
+// that classify rejects -> failed++), and an extra raw JPEG survives elsewhere in the buffer (the
+// non-thumb `Spare` stream stands in for the sectors of a stream cfb returned blank). Carving then finds
+// 2 JPEGs while the handler decoded 1 - the condition for the orchestrator's partial-failure rescue.
+export function buildPartialHashedDb(): Buffer {
+  const cfb = CFB.utils.cfb_new()
+  const prefix = Buffer.alloc(24, 0)
+  prefix.writeUInt32LE(24, 0)
+  CFB.utils.cfb_add(cfb, '/256_a1a1a1a1a1a1a1a1', Buffer.concat([prefix, CARVEABLE_JPEG]))
+  CFB.utils.cfb_add(cfb, '/256_b2b2b2b2b2b2b2b2', Buffer.alloc(64, 0x5a))
+  CFB.utils.cfb_add(cfb, '/Spare', CARVEABLE_JPEG)
+  return Buffer.from(CFB.write(cfb, { type: 'buffer' }) as Uint8Array)
+}
+
+// Same partial-read shape but catalog-backed (real filenames). The rescue must stay gated off so the
+// handler's metadata survives even though carving would find more thumbnails than it decoded.
+export function buildPartialCatalogDb(): Buffer {
+  const items: FixtureItem[] = [
+    { index: 1, name: 'GOOD.JPG', date: new Date('2010-01-01T00:00:00Z') },
+    { index: 2, name: 'BROKEN.JPG', date: new Date('2010-01-02T00:00:00Z') }
+  ]
+  const cfb = CFB.utils.cfb_new()
+  CFB.utils.cfb_add(cfb, 'Catalog', buildCatalog(items, 16))
+  CFB.utils.cfb_add(cfb, '/1', CARVEABLE_JPEG)
+  CFB.utils.cfb_add(cfb, '/2', Buffer.alloc(64, 0x5a))
+  CFB.utils.cfb_add(cfb, '/Spare', CARVEABLE_JPEG)
+  return Buffer.from(CFB.write(cfb, { type: 'buffer' }) as Uint8Array)
+}
+
 // hashed-png: same hashed layout as hashed-jpeg (no Catalog, `<size>_<hash>` streams), but the payload
 // is a PNG behind the 24-byte MS prefix instead of a JPEG. The PNG-signature scan strips the prefix.
 export function buildHashedPngDb(): Buffer {

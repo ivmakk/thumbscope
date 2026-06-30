@@ -245,6 +245,8 @@ tests/fixtures/real/
 docs/local/
 # Personal doc layer (real paths, machine-specific notes).
 *.local.md
+# Local-only /code-review instructions (personal review style; don't force on others).
+/REVIEW.md
 # Raw third-party / device thumbnail caches, in case any are copied outside tests/fixtures/real/.
 *.ptc
 *.lrprev
