@@ -317,7 +317,10 @@ function App(): React.JSX.Element {
       ) : (
         <>
         {result.recovered && (
-          <div className="flex items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-300">
+          <div
+            data-testid="recovery-banner"
+            className="flex items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-300"
+          >
             <TriangleAlert className="h-3.5 w-3.5 shrink-0" />
             <span>
               <span className="font-medium">

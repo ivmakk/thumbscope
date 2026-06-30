@@ -120,6 +120,7 @@ export function Preview({ entry, version }: { entry: ThumbMeta | null; version: 
       >
         {url && (
           <img
+            data-testid="preview-image"
             src={url}
             alt={entry.label}
             draggable={false}

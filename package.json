@@ -14,12 +14,14 @@
     "cli": "node src/cli/index.ts",
     "build:cli": "node scripts/build-cli.mjs",
     "build:icons": "node scripts/build-icons.mjs",
-    "typecheck": "tsgo --noEmit -p tsconfig.node.json && tsgo --noEmit -p tsconfig.web.json",
-    "typecheck:tsc": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "typecheck": "tsgo --noEmit -p tsconfig.node.json && tsgo --noEmit -p tsconfig.web.json && tsgo --noEmit -p e2e/tsconfig.json",
+    "typecheck:tsc": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p e2e/tsconfig.json",
     "test": "node --test \"src/**/*.test.ts\"",
     "test:core": "node --test \"src/core/**/*.test.ts\"",
     "test:renderer": "vitest run",
     "test:all": "npm test && npm run test:renderer",
+    "pretest:e2e": "electron-vite build",
+    "test:e2e": "playwright test -c e2e/playwright.config.ts",
     "pack:dir": "electron-vite build && npm run build:cli && electron-builder --dir",
     "dist:win": "electron-vite build && npm run build:cli && electron-builder --win",
     "dist:mac": "electron-vite build && npm run build:cli && electron-builder --mac"
@@ -69,6 +71,7 @@
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/vite": "^4.3.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
