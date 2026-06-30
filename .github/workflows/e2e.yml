@@ -34,6 +34,10 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+        env:
+          # `_electron` drives Electron's bundled Chromium, so Playwright's own browser
+          # binaries are never used - skip downloading them on every CI run.
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
       # `pretest:e2e` runs `electron-vite build` once (no build:cli - export runs sharp
       # inside main, the CLI bundle is never exercised by E2E).
       - run: npm run test:e2e

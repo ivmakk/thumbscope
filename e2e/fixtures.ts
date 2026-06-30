@@ -70,7 +70,8 @@ export const test = base.extend<Options & Fixtures>({
     let profile: string | undefined
     if (freshProfile) {
       profile = await mkdtemp(join(tmpdir(), 'tscope-prof-'))
-      args.push(`--user-data-dir=${profile}`)
+      // Chromium switch goes before the app path (canonical position); isolates the profile per launch.
+      args.unshift(`--user-data-dir=${profile}`)
     }
     let app: ElectronApplication | undefined
     try {

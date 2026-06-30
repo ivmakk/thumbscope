@@ -128,7 +128,7 @@ npm run test:e2e                    # Playwright _electron (builds first, then r
 npm run test:all                    # node --test then vitest
 ```
 
-Node 24 strips TypeScript types natively, so the `.ts` test files run directly with no build step. The E2E tier needs no `npx playwright install` - it drives the Chromium bundled in the `electron` dependency.
+Node 24 strips TypeScript types natively, so the `.ts` test files run directly with no build step. The E2E tier needs no `npx playwright install` - `_electron` drives the Chromium bundled in the `electron` dependency, so Playwright's own browser binaries are never used (CI skips downloading them with `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`).
 
 See [`docs/testing.md`](docs/testing.md) for what each tier covers, how to run E2E locally with the GUI and traces, and how to add a format case or a new spec.
 

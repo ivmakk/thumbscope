@@ -40,7 +40,7 @@ The E2E tier launches the unpacked build (`out/`, what `npm run dev` runs), not 
 npx playwright test -c e2e/playwright.config.ts
 ```
 
-There is no `npx playwright install` step. Playwright's `_electron` drives the Chromium that ships inside the `electron` dependency over the DevTools protocol, so there is no separate browser to download.
+You never run `npx playwright install`. Playwright's `_electron` drives the Chromium that ships inside the `electron` dependency over the DevTools protocol, so the browser binaries Playwright would otherwise manage are never used. CI sets `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` on install to skip fetching them; locally `npm ci` may download them once and leave them unused, which is harmless.
 
 Electron has no real headless mode. The Windows and macOS runners run a headed window natively, which is the same thing you see locally, so a green local run and a green CI run mean the same thing.
 
