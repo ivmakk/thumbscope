@@ -28,8 +28,9 @@ Decided deliberately; don't relitigate without reason.
 - `npm test` - `node --test "src/**/*.test.ts"`. Owns every `*.test.ts` (core, CLI, renderer logic kernels, IPC-contract guard) - fast, zero-dep, the default.
 - `npm run test:core` - `node --test "src/core/**/*.test.ts"` (core-only inner loop).
 - `npm run test:renderer` - `vitest run` (React render tests, `*.test.tsx`, happy-dom). The only tier that needs a DOM.
-- `npm run test:all` - both tiers (`npm test` then `vitest run`).
-- **Test-file convention:** extension picks the runner - `*.test.ts` -> `node --test` (pure logic, no DOM), `*.test.tsx` -> Vitest (component render). Default to extracting pure logic into `src/renderer/src/lib/` and testing it under `node --test`; reserve `.test.tsx` for what genuinely needs a browser.
+- `npm run test:all` - both headless tiers (`npm test` then `vitest run`).
+- `npm run test:e2e` (alias `npm run e2e`) - Playwright `_electron` end-to-end on the built app (`e2e/specs/*.spec.ts`), Windows + macOS. Builds first via `pretest:e2e`. The slowest tier; reach for it only when a flow needs the real Electron process or a real layout/pointer engine (virtualized grid render, Radix open/select, an open->export round-trip) - things happy-dom can't exercise. Full guide: `docs/testing.md`.
+- **Test-file convention:** extension picks the runner - `*.test.ts` -> `node --test` (pure logic, no DOM), `*.test.tsx` -> Vitest (component render), `*.spec.ts` under `e2e/` -> Playwright (real app). Default to extracting pure logic into `src/renderer/src/lib/` and testing it under `node --test`; reserve `.test.tsx` for what genuinely needs a browser, and E2E for what needs the whole app.
 - Single test file: `node --test src/core/parser.test.ts`.
 - `npm run cli -- <args>` - run the CLI from source (e.g. `npm run cli -- list sample/Thumbs.db`).
 - `npm run build:icons` - regenerate the icon set from `build/icon.svg` (see Branding).

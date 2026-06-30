@@ -1,0 +1,54 @@
+name: E2E
+
+# Unpacked Playwright `_electron` E2E on the two desktop targets we ship. Separate
+# from ci.yml (fast Linux unit tier) and parallel to it - public-repo runners are free, so
+# there is no cost reason to gate this behind the Linux suite. Slow win+mac runs live where
+# release-bound code does: PRs into develop/main, and pushes to release/hotfix/main.
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [main, 'release/**', 'hotfix/**']
+    # Skip docs-only pushes to stabilization branches; PRs still run unconditionally.
+    # Includes the build inputs `pretest:e2e` depends on (electron-vite + tsconfigs).
+    paths: ['src/**', 'e2e/**', 'package*.json', 'electron.vite.config.ts', 'tsconfig*.json']
+  workflow_dispatch: {}
+
+# A new PR push supersedes the in-flight run for that ref.
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20 # fail fast if a runner-level Electron launch / build wedges
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+        env:
+          # `_electron` drives Electron's bundled Chromium, so Playwright's own browser
+          # binaries are never used - skip downloading them on every CI run.
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+      # `pretest:e2e` runs `electron-vite build` once (no build:cli - export runs sharp
+      # inside main, the CLI bundle is never exercised by E2E).
+      - run: npm run test:e2e
+        env:
+          # No signing step here (unpacked launch), but make macOS signing a no-op rather
+          # than a failure if any tool probes for a Developer ID cert.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - name: Upload traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-traces-${{ matrix.os }}
+          path: test-results/
+          if-no-files-found: ignore
