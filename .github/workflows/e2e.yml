@@ -14,6 +14,10 @@ on:
     paths: ['src/**', 'e2e/**', 'package*.json', 'electron.vite.config.ts', 'tsconfig*.json']
   workflow_dispatch: {}
 
+# Read-only default token: build + launch the app, upload trace artifacts on failure.
+permissions:
+  contents: read
+
 # A new PR push supersedes the in-flight run for that ref.
 concurrency:
   group: e2e-${{ github.ref }}
