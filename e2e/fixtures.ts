@@ -6,6 +6,9 @@ import { GridScreen } from './screens/grid'
 import { PreviewScreen } from './screens/preview'
 import { MenuBarScreen } from './screens/menubar'
 import { ExportDialogScreen } from './screens/exportDialog'
+import { TableScreen } from './screens/table'
+import { ToolbarScreen } from './screens/toolbar'
+import { StatusBarScreen } from './screens/statusbar'
 
 // Playwright is invoked from the repo root (the `test:e2e` script), so cwd is the repo
 // root - used both to resolve committed samples and as the launch cwd, so `electron .`
@@ -27,6 +30,9 @@ type Screens = {
   preview: PreviewScreen
   menubar: MenuBarScreen
   exportDialog: ExportDialogScreen
+  table: TableScreen
+  toolbar: ToolbarScreen
+  statusbar: StatusBarScreen
 }
 
 type Fixtures = {
@@ -99,6 +105,15 @@ export const test = base.extend<Options & Fixtures>({
   },
   exportDialog: async ({ page }, use) => {
     await use(new ExportDialogScreen(page))
+  },
+  table: async ({ page }, use) => {
+    await use(new TableScreen(page))
+  },
+  toolbar: async ({ page }, use) => {
+    await use(new ToolbarScreen(page))
+  },
+  statusbar: async ({ page }, use) => {
+    await use(new StatusBarScreen(page))
   },
 })
 

@@ -62,14 +62,15 @@ CI uploads `test-results/` as an artifact when a run fails, so a CI-only failure
 
 ## How the E2E suite is organized
 
-Two spec files, split by what a red result tells you:
+Three spec files, split by what a red result tells you:
 
 - `e2e/specs/smoke.spec.ts` is depth. One full pipeline against a temp copy of `Thumbs.db`: open, browse, preview, export through the menubar, then check the files on disk. A red smoke means the core path broke.
 - `e2e/specs/formats.spec.ts` is breadth. One case per committed sample, checking that each format is detected and renders. A red `formats > <file>` means that one format regressed.
+- `e2e/specs/interactions.spec.ts` is interaction wiring that needs a real pointer, layout, or keyboard engine: the theme toggle, virtualized table selection (single / shift-range / ctrl-toggle), and the sort `Select` + keyboard-driven menubar. A red `interactions > <describe>` means that surface's wiring regressed.
 
-Specs talk to the app through screen objects, not raw locators. Each object in `e2e/screens/` wraps one surface (the grid, the preview, the menubar, the export dialog) and exposes intent-level methods like `waitForThumbnails()` or `openExport()`. The objects are injected as Playwright fixtures from `e2e/fixtures.ts`, so a spec never calls `new` on one. When a selector changes, you fix it in one screen object instead of across every spec.
+Specs talk to the app through screen objects, not raw locators. Each object in `e2e/screens/` wraps one surface (the grid, the preview, the menubar, the export dialog, the table, the toolbar, the status bar) and exposes intent-level methods like `waitForThumbnails()` or `openExport()`. The objects are injected as Playwright fixtures from `e2e/fixtures.ts`, so a spec never calls `new` on one. When a selector changes, you fix it in one screen object instead of across every spec.
 
-Stable hooks are `data-testid` attributes (`thumb-cell`, `preview-image`, `recovery-banner`). Everything else uses accessible roles and names through `getByRole`. Reach for a testid only when there is no stable role or text.
+Stable hooks are `data-testid` attributes (`thumb-cell`, `preview-image`, `recovery-banner`, `table-row`, `sort-<key>:<dir>`) plus the `data-selected` render signal on grid cells and table rows. Everything else uses accessible roles and names through `getByRole`. Reach for a testid only when there is no stable role or text.
 
 The fixtures isolate each launch: a fresh `--user-data-dir` per app, and a temp copy of the sample when a test exports, so the committed sample files are never written to.
 

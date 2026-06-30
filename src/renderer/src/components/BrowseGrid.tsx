@@ -69,6 +69,7 @@ export function BrowseGrid({
                   <button
                     key={e.streamName}
                     data-testid="thumb-cell"
+                    data-selected={isSel}
                     onClick={(ev) => onClick(e, { shift: ev.shiftKey, ctrl: ev.ctrlKey || ev.metaKey })}
                     title={e.label}
                     className={cn(
