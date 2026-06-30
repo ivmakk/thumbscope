@@ -23,9 +23,11 @@ test.describe('theme', () => {
     const darkBg = await bodyBg()
     expect(darkBg).not.toBe(lightBg)
 
-    // System: resolves to the OS preference; assert the class and the matching captured color.
-    const expectDark = await app.evaluate(({ nativeTheme }) => nativeTheme.shouldUseDarkColors)
+    // System: resolves to the OS preference. Read shouldUseDarkColors only AFTER switching to
+    // 'system' - setTheme sets nativeTheme.themeSource, so reading it while still on 'dark' would
+    // return the forced value, not the OS resolution.
     await menubar.setTheme('system')
+    const expectDark = await app.evaluate(({ nativeTheme }) => nativeTheme.shouldUseDarkColors)
     await expect.poll(hasDark).toBe(expectDark)
     expect(await bodyBg()).toBe(expectDark ? darkBg : lightBg)
   })
