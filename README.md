@@ -118,12 +118,19 @@ npm run cli -- list sample/Thumbs.db
 
 ### 3.5. Testing
 
+Three tiers, picked by file extension: `node --test` for pure logic (`*.test.ts`), Vitest for component render (`*.test.tsx`), and Playwright `_electron` for the real app end-to-end (`e2e/specs/*.spec.ts`, Windows + macOS).
+
 ```sh
 npm test                            # node --test over src/**/*.test.ts
 node --test src/core/parser.test.ts # single file
+npm run test:renderer               # vitest component tier (.test.tsx)
+npm run test:e2e                    # Playwright _electron (builds first, then runs e2e/specs)
+npm run test:all                    # node --test then vitest
 ```
 
-Node 24 strips TypeScript types natively, so the `.ts` test files run directly with no build step.
+Node 24 strips TypeScript types natively, so the `.ts` test files run directly with no build step. The E2E tier needs no `npx playwright install` - it drives the Chromium bundled in the `electron` dependency.
+
+See [`docs/testing.md`](docs/testing.md) for what each tier covers, how to run E2E locally with the GUI and traces, and how to add a format case or a new spec.
 
 ### 3.6. Type-checking
 
