@@ -44,6 +44,18 @@ You never run `npx playwright install`. Playwright's `_electron` drives the Chro
 
 Electron has no real headless mode. The Windows and macOS runners run a headed window natively, which is the same thing you see locally, so a green local run and a green CI run mean the same thing.
 
+### Running locally without the GUI (hidden window, headless-style)
+
+A headed window per test flashes on screen, takes a taskbar slot, and grabs focus on each launch. There is no true headless mode, so `E2E_HIDE_WINDOW=1` parks the window off-screen instead, at the same speed as a headed run. Only the test launch is affected, not `npm run dev`.
+
+To enable it, copy the sample to a gitignored local file (the value is already set there):
+
+```sh
+cp e2e/.env.sample e2e/.env.local
+```
+
+`e2e/playwright.config.ts` loads `e2e/.env.local` if present, so it is per-machine and a no-op for other contributors and CI. Remove the file (or set `E2E_HIDE_WINDOW=0`) to go back to headed.
+
 ### Troubleshooting locally
 
 The window is visible by default. To slow it down and watch it work, set a `slowMo` in `e2e/fixtures.ts` on the `_electron.launch` call, or open the Playwright inspector:

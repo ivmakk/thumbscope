@@ -13,10 +13,17 @@ import type { ExportOpts, ThemeChoice } from '../shared/ipc.ts'
 let current: { path: string; entries: Map<string, ThumbEntry> } | null = null
 let mainWindow: BrowserWindow | null = null
 
+// E2E_HIDE_WINDOW: local headless-style runs. Park the window off-screen, off the taskbar, and never
+// activate it (showInactive + no focus), so it neither appears nor steals focus while tests drive
+// it over CDP. It stays *shown* (visibilityState 'visible') so Chromium does not throttle
+// rAF/timers - render-timing tests stay fast.
+const E2E_HIDE_WINDOW = process.env['E2E_HIDE_WINDOW'] === '1'
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1280,
     height: 860,
+    ...(E2E_HIDE_WINDOW ? { x: -3200, y: -3200, skipTaskbar: true } : {}),
     // Floor the window size so the two-panel layout (and the preview control bar at the
     // preview panel's minimum width) can't be squeezed to clipping at extreme small
     // widths. The panel minimum is a dynamic ~150px floor computed in the renderer.
@@ -29,7 +36,8 @@ function createWindow(): void {
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.mjs'),
       contextIsolation: true,
-      sandbox: false
+      sandbox: false,
+      backgroundThrottling: !E2E_HIDE_WINDOW
     }
   })
   mainWindow = win
@@ -37,7 +45,7 @@ function createWindow(): void {
     if (mainWindow === win) mainWindow = null
   })
 
-  win.on('ready-to-show', () => win.show())
+  win.on('ready-to-show', () => (E2E_HIDE_WINDOW ? win.showInactive() : win.show()))
 
   if (process.env['ELECTRON_RENDERER_URL']) {
     win.loadURL(process.env['ELECTRON_RENDERER_URL'])
@@ -56,7 +64,7 @@ async function openPathToWindow(path: string): Promise<void> {
   if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send)
   else send()
   if (win.isMinimized()) win.restore()
-  win.focus()
+  if (!E2E_HIDE_WINDOW) win.focus()
 }
 
 function toMeta(e: ThumbEntry) {
