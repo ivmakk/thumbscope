@@ -16,6 +16,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Slider } from '@/components/ui/slider'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable'
+import { resolveDisplayIndex } from '@/lib/tableIndex'
 import { BrowseGrid } from '@/components/BrowseGrid'
 import { BrowseTable } from '@/components/BrowseTable'
 import { Preview } from '@/components/Preview'
@@ -94,11 +95,13 @@ function App(): React.JSX.Element {
     setThemeState(choice)
   }, [])
 
+  // Resolve the `#` once per file (not per sort/filter toggle): index-less variants get a stable
+  // 1-based stamp of their position in the parser's entry order, before the filter/sort reorder them.
+  const resolved = useMemo(() => (result ? resolveDisplayIndex(result.entries) : []), [result])
   const entries = useMemo(() => {
-    if (!result) return []
-    const base = orphanFilter ? result.entries.filter((e) => e.orphan) : result.entries
+    const base = orphanFilter ? resolved.filter((e) => e.orphan) : resolved
     return sortEntries(base, sortKey, sortDir)
-  }, [result, sortKey, sortDir, orphanFilter])
+  }, [resolved, sortKey, sortDir, orphanFilter])
   const orderedIds = useMemo(() => entries.map((e) => e.streamName), [entries])
   const previewPos = previewId ? orderedIds.indexOf(previewId) + 1 : 0 // 1-based; 0 = none
   const orphanCount = result ? result.entries.filter((e) => e.orphan).length : 0

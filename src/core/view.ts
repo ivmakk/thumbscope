@@ -13,6 +13,13 @@ export interface ViewEntry {
   index: number | null
 }
 
+// Shared date-time formatter (renderer table + CLI list): "2010-07-02T14:03:20.000Z" ->
+// "2010-07-02 14:03:20" (drop T / Z / milliseconds). `empty` is the placeholder for a null date -
+// the table passes '' (blank cell), the CLI passes '-'. Pure, no DOM.
+export function formatDateTime(iso: string | null, empty = ''): string {
+  return iso ? iso.slice(0, 19).replace('T', ' ') : empty
+}
+
 export function filterEntries<T extends { label: string; name: string | null }>(items: T[], query: string): T[] {
   const q = query.trim().toLowerCase()
   if (!q) return items
