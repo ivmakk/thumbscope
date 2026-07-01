@@ -1,7 +1,16 @@
-import { test, expect, vi } from 'vitest'
+import { test, expect, vi, beforeAll } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { BrowseTable } from './BrowseTable'
 import type { ThumbMeta } from '../../../preload'
+
+// happy-dom has no real canvas, so measureText returns 0 and auto-fit (correctly) bails. Stub a
+// proportional-ish width so the auto-fit path is exercised headlessly; real measurement is E2E.
+beforeAll(() => {
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+    font: '',
+    measureText: (t: string) => ({ width: t.length * 8 })
+  } as unknown as CanvasRenderingContext2D)
+})
 
 // Row bodies are virtualized (TanStack) and need real layout, which happy-dom lacks - so row
 // content (resolved #, blank cells) is covered by the pure kernels (tableIndex/tableFormat tests)
