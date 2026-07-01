@@ -39,7 +39,7 @@ export function ThumbImage({
         src={src}
         alt={alt}
         className={className}
-        style={{ ...imgStyle, ...(loaded ? null : { display: 'none' }) }}
+        style={{ ...imgStyle, ...(loaded || failed ? null : { display: 'none' }) }}
         onLoad={() => setLoaded(true)}
         onError={() => setFailed(true)}
       />

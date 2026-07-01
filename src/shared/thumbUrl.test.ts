@@ -15,3 +15,8 @@ test('malformed / non-thumb URL → null', () => {
   assert.equal(parseThumbUrl('thumb://img/3'), null)
   assert.equal(parseThumbUrl('garbage'), null)
 })
+
+test('malformed percent-escape → null, not a throw', () => {
+  assert.equal(parseThumbUrl('thumb://img/1/%'), null)
+  assert.equal(parseThumbUrl('thumb://img/1/%zz'), null)
+})
