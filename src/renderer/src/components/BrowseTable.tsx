@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import type { ThumbMeta } from '../../../preload'
@@ -82,8 +82,10 @@ export function BrowseTable({
   useResetScrollOnVersion(virt, version)
 
   // Manual/auto-fit width overrides (px), ephemeral: reset on every new file open (`version` bump).
+  // useLayoutEffect (not useEffect) so the reset runs before paint - otherwise the new file's rows
+  // flash for one frame at the previous file's widths.
   const [overrides, setOverrides] = useState<WidthOverrides>({})
-  useEffect(() => setOverrides({}), [version])
+  useLayoutEffect(() => setOverrides({}), [version])
   const setOverride = useCallback((k: ColKey, px: number) => setOverrides((o) => ({ ...o, [k]: px })), [])
 
   const cols = gridTemplate(overrides)
@@ -110,7 +112,9 @@ export function BrowseTable({
   }
 
   // Double-click a border: auto-fit to the widest value. Measure the header label in its own font
-  // and cell values in the cell font (they differ); prefilter to the longest ~100 to bound cost.
+  // and cell values in the cell font (they differ). Measure every distinct value - a character-count
+  // prefilter would be wrong for a proportional font (short-but-wide glyphs) - deduping identical
+  // strings (e.g. repeated sizes) so the pass stays cheap on large caches.
   const autoFitColumn = useCallback(
     (k: ColKey) => {
       const headEl = headRef.current?.querySelector<HTMLElement>(`[data-col="${k}"]`)
@@ -118,12 +122,14 @@ export function BrowseTable({
       const bodyEl = scrollRef.current?.querySelector<HTMLElement>(`[data-testid="table-row"] [data-col="${k}"]`)
       const headerFont = fontOf(headEl)
       const bodyFont = bodyEl ? fontOf(bodyEl) : headerFont
-      const vals = entries
-        .map((e) => cellText(k, e))
-        .sort((a, b) => b.length - a.length)
-        .slice(0, 100)
       let max = measureText(HEADER[k].label, headerFont)
-      for (const t of vals) max = Math.max(max, measureText(t, bodyFont))
+      const seen = new Set<string>()
+      for (const e of entries) {
+        const t = cellText(k, e)
+        if (seen.has(t)) continue
+        seen.add(t)
+        max = Math.max(max, measureText(t, bodyFont))
+      }
       setOverride(k, autoFitWidth(max, { paddingPx: CELL_PAD_PX, extraPx: k === 'name' ? NAME_EXTRA_PX : 0 }))
     },
     [entries, setOverride]

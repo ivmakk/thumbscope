@@ -7,7 +7,7 @@ import { openThumbnailDb } from '../core/formats/open.ts'
 import { resolveDbPath } from '../core/shell.ts'
 import { exportEntries } from '../core/encode.ts'
 import { toCsv, type SizeMode, type CsvRow } from '../core/export.ts'
-import { sortEntries } from '../core/view.ts'
+import { sortEntries, formatDateTime } from '../core/view.ts'
 import type { ThumbEntry } from '../core/types.ts'
 
 export interface ExportArgs {
@@ -141,13 +141,11 @@ export async function cmdList(db: string, args: ListArgs): Promise<number> {
   // Aligned table: header + one row per thumbnail, columns padded to their widest value.
   // Column order mirrors the UI table (#, Name, Size, Date, Dims).
   const header = ['#', 'NAME', 'SIZE', 'DATE', 'DIMS']
-  // "2010-07-02T14:03:20.000Z" -> "2010-07-02 14:03:20" (drop T / Z / milliseconds).
-  const fmtDate = (iso: string | null): string => (iso ? iso.slice(0, 19).replace('T', ' ') : '-')
   const table = rows.map((r) => [
     String(r.id),
     r.filename,
     String(r.size),
-    fmtDate(r.date),
+    formatDateTime(r.date, '-'),
     r.width && r.height ? `${r.width}x${r.height}` : '-'
   ])
   const widths = header.map((h) => h.length)

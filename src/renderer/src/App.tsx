@@ -95,14 +95,13 @@ function App(): React.JSX.Element {
     setThemeState(choice)
   }, [])
 
+  // Resolve the `#` once per file (not per sort/filter toggle): index-less variants get a stable
+  // 1-based stamp of their position in the parser's entry order, before the filter/sort reorder them.
+  const resolved = useMemo(() => (result ? resolveDisplayIndex(result.entries) : []), [result])
   const entries = useMemo(() => {
-    if (!result) return []
-    // Resolve the `#` on the raw file-order entries first, so index-less variants get a stable
-    // file-position stamp before the orphan filter / sort reorder them.
-    const resolved = resolveDisplayIndex(result.entries)
     const base = orphanFilter ? resolved.filter((e) => e.orphan) : resolved
     return sortEntries(base, sortKey, sortDir)
-  }, [result, sortKey, sortDir, orphanFilter])
+  }, [resolved, sortKey, sortDir, orphanFilter])
   const orderedIds = useMemo(() => entries.map((e) => e.streamName), [entries])
   const previewPos = previewId ? orderedIds.indexOf(previewId) + 1 : 0 // 1-based; 0 = none
   const orphanCount = result ? result.entries.filter((e) => e.orphan).length : 0
