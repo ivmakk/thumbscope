@@ -20,7 +20,7 @@ import { makeEntry } from '../internal/entry.ts'
 // message instead of crashing. Pure + injectable `max` so it is unit-tested without a multi-GB file.
 export function assertOpenableSize(size: number, max: number = bufferConstants.MAX_LENGTH): void {
   if (size > max) {
-    throw new Error(`thumbcache cache too large to open: ${size} bytes exceeds the ${max}-byte in-memory limit`)
+    throw new Error(`thumbcache file too large to open: ${size} bytes exceeds the ${max}-byte in-memory limit`)
   }
 }
 
