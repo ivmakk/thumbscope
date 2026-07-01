@@ -16,6 +16,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Slider } from '@/components/ui/slider'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable'
+import { resolveDisplayIndex } from '@/lib/tableIndex'
 import { BrowseGrid } from '@/components/BrowseGrid'
 import { BrowseTable } from '@/components/BrowseTable'
 import { Preview } from '@/components/Preview'
@@ -96,7 +97,10 @@ function App(): React.JSX.Element {
 
   const entries = useMemo(() => {
     if (!result) return []
-    const base = orphanFilter ? result.entries.filter((e) => e.orphan) : result.entries
+    // Resolve the `#` on the raw file-order entries first, so index-less variants get a stable
+    // file-position stamp before the orphan filter / sort reorder them.
+    const resolved = resolveDisplayIndex(result.entries)
+    const base = orphanFilter ? resolved.filter((e) => e.orphan) : resolved
     return sortEntries(base, sortKey, sortDir)
   }, [result, sortKey, sortDir, orphanFilter])
   const orderedIds = useMemo(() => entries.map((e) => e.streamName), [entries])
