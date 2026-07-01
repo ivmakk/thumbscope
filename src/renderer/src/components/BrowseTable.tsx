@@ -105,10 +105,17 @@ export function BrowseTable({
     const d = dragRef.current
     if (d) setOverride(d.k, resizeWidth(d.startW, ev.clientX - d.startX))
   }
-  const onHandleUp = (ev: React.PointerEvent) => {
+  // End the drag on up OR cancel; release capture only if we still hold it (avoids a throw when the
+  // capture was already lost). A separate lost-capture handler clears state so an interrupted drag
+  // can't leave dragRef set and keep resizing on later moves.
+  const endDrag = (ev: React.PointerEvent) => {
     if (!dragRef.current) return
     dragRef.current = null
-    ;(ev.currentTarget as HTMLElement).releasePointerCapture(ev.pointerId)
+    const el = ev.currentTarget as HTMLElement
+    if (el.hasPointerCapture(ev.pointerId)) el.releasePointerCapture(ev.pointerId)
+  }
+  const onLostCapture = () => {
+    dragRef.current = null
   }
 
   // Double-click a border: auto-fit to the widest value. Measure the header label in its own font
@@ -130,6 +137,7 @@ export function BrowseTable({
         seen.add(t)
         max = Math.max(max, measureText(t, bodyFont))
       }
+      if (max <= 0) return // canvas unavailable -> don't collapse the column to padding width
       setOverride(k, autoFitWidth(max, { paddingPx: CELL_PAD_PX, extraPx: k === 'name' ? NAME_EXTRA_PX : 0 }))
     },
     [entries, setOverride]
@@ -161,7 +169,9 @@ export function BrowseTable({
                 data-testid={`resize-${k}`}
                 onPointerDown={onHandleDown(k)}
                 onPointerMove={onHandleMove}
-                onPointerUp={onHandleUp}
+                onPointerUp={endDrag}
+                onPointerCancel={endDrag}
+                onLostPointerCapture={onLostCapture}
                 onClick={(e) => e.stopPropagation()}
                 onDoubleClick={(e) => {
                   e.stopPropagation()

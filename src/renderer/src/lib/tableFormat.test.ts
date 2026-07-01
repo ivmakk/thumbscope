@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert'
 import { fmtSize, fmtDate, fmtDims } from './tableFormat.ts'
 
-test('fmtSize: bytes under 1 KiB, else 1-decimal KB', () => {
+test('fmtSize: bytes under 1024, else 1-decimal KB (n/1024)', () => {
   assert.strictEqual(fmtSize(512), '512 B')
   assert.strictEqual(fmtSize(1024), '1.0 KB')
   assert.strictEqual(fmtSize(1536), '1.5 KB')
