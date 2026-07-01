@@ -79,7 +79,7 @@ test('encodeJpeg on an rgba payload flattens alpha to a valid JPEG', async () =>
     pixels[i + 2] = 50
     pixels[i + 3] = 128 // semi-transparent
   }
-  const payload: Payload = { kind: 'rgba', width, height, pixels }
+  const payload: Payload = { kind: 'rgba', width, height, pixels, hasAlpha: true }
   const jpeg = await encodeJpeg(payload, width, height, 'original', 85)
   assert.strictEqual(jpeg[0], 0xff)
   assert.strictEqual(jpeg[1], 0xd8) // SOI

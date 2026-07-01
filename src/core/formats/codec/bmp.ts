@@ -62,7 +62,7 @@ const BGRA_MASKS = [0x00ff0000, 0x0000ff00, 0x000000ff, 0xff000000]
 // packed top-down *straight* RGBA. Windows stores these premultiplied, so alpha<255 pixels are divided
 // back out. Distinct from parseBmp (which yields opaque RGB for IrfanView) because this path keeps the
 // alpha channel and only accepts standard BGRA masks. Returns null for anything it can't trust.
-export function parseBmpRgba(buf: Buffer): { width: number; height: number; pixels: Buffer } | null {
+export function parseBmpRgba(buf: Buffer): { width: number; height: number; pixels: Buffer; hasAlpha: boolean } | null {
   const header = readBmpHeader(buf)
   if (!header || header.bpp !== 32) return null // this path is alpha-only; 24bpp stays on parseBmp
   const { dataOffset, width, height, bottomUp } = header
@@ -102,13 +102,16 @@ export function parseBmpRgba(buf: Buffer): { width: number; height: number; pixe
   // A uniformly-zero alpha channel is unused padding, not a fully-transparent image - treat as opaque.
   if (!anyAlpha) {
     for (let i = 3; i < out.length; i += 4) out[i] = 0xff
-    return { width, height, pixels: out }
+    return { width, height, pixels: out, hasAlpha: false }
   }
 
   // Un-premultiply: straight = premultiplied * 255 / alpha (clamped). Fully-transparent pixels carry no
-  // meaningful color - zero them.
+  // meaningful color - zero them. hasAlpha = any genuinely translucent pixel (a < 255): drives the
+  // per-thumb transparency backdrop so opaque 32bpp images don't get a needless checkerboard.
+  let hasAlpha = false
   for (let i = 0; i < out.length; i += 4) {
     const a = out[i + 3]
+    if (a < 255) hasAlpha = true
     if (a === 0) {
       out[i] = out[i + 1] = out[i + 2] = 0
     } else if (a < 255) {
@@ -117,5 +120,5 @@ export function parseBmpRgba(buf: Buffer): { width: number; height: number; pixe
       out[i + 2] = Math.min(255, Math.round((out[i + 2] * 255) / a))
     }
   }
-  return { width, height, pixels: out }
+  return { width, height, pixels: out, hasAlpha }
 }

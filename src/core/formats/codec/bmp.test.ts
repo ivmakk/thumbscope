@@ -26,6 +26,27 @@ test('parseBmpRgba treats a uniformly-zero alpha channel as opaque', () => {
   assert.deepEqual(Array.from(bmp.pixels), [30, 20, 10, 255])
 })
 
+// hasAlpha drives the per-thumb transparency backdrop: true only when a pixel is genuinely translucent
+// (a < 255). A 32bpp image whose alpha is uniformly 255 is opaque and must not report alpha.
+test('parseBmpRgba reports hasAlpha=false for a fully-opaque 32bpp image', () => {
+  const bmp = parseBmpRgba(makeBmpV5(2, 1, [[10, 20, 30, 255], [40, 50, 60, 255]]))
+  assert.ok(bmp)
+  assert.strictEqual(bmp.hasAlpha, false)
+})
+
+test('parseBmpRgba reports hasAlpha=true when any pixel is translucent', () => {
+  const bmp = parseBmpRgba(makeBmpV5(2, 1, [[10, 20, 30, 255], [40, 50, 60, 51]]))
+  assert.ok(bmp)
+  assert.strictEqual(bmp.hasAlpha, true)
+})
+
+// The uniform-0 path is forced opaque (alpha rewritten to 255), so it must also report no alpha.
+test('parseBmpRgba reports hasAlpha=false for the uniformly-zero (opaque-forced) case', () => {
+  const bmp = parseBmpRgba(makeBmpV5(1, 1, [[10, 20, 30, 0]]))
+  assert.ok(bmp)
+  assert.strictEqual(bmp.hasAlpha, false)
+})
+
 // Non-standard BITFIELDS masks (channels reordered) are rejected rather than mis-decoded.
 test('parseBmpRgba rejects non-standard channel masks', () => {
   const bmp = parseBmpRgba(makeBmpV5(1, 1, [[0, 0, 0, 255]], { masks: [0x000000ff, 0x0000ff00, 0x00ff0000, 0xff000000] }))

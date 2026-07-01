@@ -43,6 +43,7 @@ export interface ThumbMeta {
   width: number | null
   height: number | null
   size: number
+  hasAlpha: boolean // payload carries a genuinely translucent pixel (real transparency, not just a 32bpp tag)
   orphan: boolean // a real filename whose original no longer exists in the source folder (recoverable)
 }
 

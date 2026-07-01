@@ -34,7 +34,7 @@ test('decode wraps a dib payload as a BMP', async () => {
 })
 
 test('decode renders an rgba payload to a PNG (no throw)', async () => {
-  const p: Payload = { kind: 'rgba', width: 2, height: 1, pixels: Buffer.from([10, 20, 30, 255, 0, 0, 0, 0]) }
+  const p: Payload = { kind: 'rgba', width: 2, height: 1, pixels: Buffer.from([10, 20, 30, 255, 0, 0, 0, 0]), hasAlpha: true }
   const img = await decode(p)
   assert.strictEqual(img.mime, 'image/png')
   assert.deepEqual(img.bytes.subarray(0, 8), Buffer.from('89504e470d0a1a0a', 'hex'))

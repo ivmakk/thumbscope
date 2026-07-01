@@ -91,7 +91,7 @@ export function BrowseGrid({
                       streamName={e.streamName}
                       version={version}
                       alt={e.label}
-                      backdrop={needsCheckerboard(e.format)}
+                      backdrop={needsCheckerboard(e)}
                       className="rounded border border-border object-contain"
                       style={{ width: img, height: img }}
                     />

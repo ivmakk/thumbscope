@@ -30,7 +30,7 @@ export function assertOpenableSize(size: number, max: number = bufferConstants.M
 function classifyThumbcache(data: Buffer): Payload | null {
   if (data.length >= 2 && data[0] === 0x42 && data[1] === 0x4d) {
     const bmp = parseBmpRgba(data)
-    return bmp ? { kind: 'rgba', width: bmp.width, height: bmp.height, pixels: bmp.pixels } : null
+    return bmp ? { kind: 'rgba', width: bmp.width, height: bmp.height, pixels: bmp.pixels, hasAlpha: bmp.hasAlpha } : null
   }
   const png = slicePng(data)
   if (png) return { kind: 'png', data: png }

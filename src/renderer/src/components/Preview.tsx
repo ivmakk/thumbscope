@@ -119,7 +119,7 @@ export function Preview({ entry, version }: { entry: ThumbMeta | null; version: 
         }}
         onPointerUp={() => (drag.current = null)}
       >
-        {url && needsCheckerboard(entry.format) && (
+        {url && needsCheckerboard(entry) && (
           <div data-testid="preview-checkerboard" aria-hidden className="absolute inset-0" style={CHECKERBOARD_STYLE} />
         )}
         {url && (

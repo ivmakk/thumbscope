@@ -98,7 +98,7 @@ function carveBmps(buf: Buffer): Payload[] {
     // Decode by the known depth: 32bpp keeps its alpha (straight RGBA); 24bpp -> opaque RGB dib.
     if (header.bpp === 32) {
       const rgba = parseBmpRgba(slice)
-      if (rgba) out.push({ kind: 'rgba', width: rgba.width, height: rgba.height, pixels: rgba.pixels })
+      if (rgba) out.push({ kind: 'rgba', width: rgba.width, height: rgba.height, pixels: rgba.pixels, hasAlpha: rgba.hasAlpha })
     } else {
       const dib = parseBmp(slice)
       if (dib) out.push({ kind: 'dib', width: dib.width, height: dib.height, pixels: dib.pixels })

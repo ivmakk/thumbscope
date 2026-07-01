@@ -1,10 +1,12 @@
 import type { CSSProperties } from 'react'
 import type { ThumbMeta } from '../../../preload'
 
-// Only the straight-RGBA payload (thumbcache small buckets) carries a real alpha channel; every other
-// payload kind is opaque, so a checkerboard behind it would just be noise. Pure predicate - unit-tested.
-export function needsCheckerboard(format: ThumbMeta['format']): boolean {
-  return format === 'rgba'
+// Draw the checkerboard only behind a thumbnail with genuinely translucent pixels (decode-time
+// `hasAlpha`), not merely one tagged as the 32bpp rgba codec - an opaque 32bpp icon/photo in a mixed
+// thumbcache bucket would otherwise get a needless checkerboard in its letterbox margins. Pure
+// predicate - unit-tested.
+export function needsCheckerboard(meta: Pick<ThumbMeta, 'hasAlpha'>): boolean {
+  return meta.hasAlpha
 }
 
 // A subtle checkerboard drawn behind transparent thumbnails so their edges read against the canvas.
