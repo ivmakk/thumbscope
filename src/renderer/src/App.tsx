@@ -21,7 +21,6 @@ import { BrowseTable } from '@/components/BrowseTable'
 import { Preview } from '@/components/Preview'
 import { ExportDialog } from '@/components/ExportDialog'
 import { MenuBar } from '@/components/MenuBar'
-import { resetImageCache } from '@/lib/imageCache'
 import { friendlyError } from '@/lib/errors'
 import { previewMinPctFor } from '@/lib/layout'
 import { parseThumbSize, DEFAULT_THUMB, THUMB_MIN, THUMB_MAX } from '@/lib/thumbSize'
@@ -118,7 +117,6 @@ function App(): React.JSX.Element {
       setError({ msg: friendlyError(r.error), path: r.path, raw: r.error })
       return
     }
-    resetImageCache()
     setError(null)
     setResult(r)
     setOrphanFilter(false)

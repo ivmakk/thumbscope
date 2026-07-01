@@ -1,7 +1,7 @@
 // Node-only (sharp). Total decode seam: turn any parsed payload into renderable bytes + a MIME type.
 // Unlike the old sync payloadToImage, this is async and total over every payload kind including
-// `abbrev-jpeg` (decoded via our own baseline decoder + a sharp raw->PNG wrap), so callers (get-image /
-// export) no longer special-case abbrev. JPEG/PNG pass through; DIB wraps as a BMP.
+// `abbrev-jpeg` (decoded via our own baseline decoder + a sharp raw->PNG wrap), so callers (the
+// `thumb://` protocol handler / export) no longer special-case abbrev. JPEG/PNG pass through; DIB wraps as a BMP.
 
 import sharp from 'sharp'
 import type { Payload } from '../../types.ts'

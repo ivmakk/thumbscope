@@ -1,6 +1,6 @@
 import { join, dirname } from 'node:path'
 import { readdir } from 'node:fs/promises'
-import { app, BrowserWindow, dialog, ipcMain, shell, clipboard, Menu, nativeTheme } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell, clipboard, Menu, nativeTheme, protocol } from 'electron'
 import { openThumbnailDb } from '../core/formats/open.ts'
 import { decode } from '../core/formats/codec/decode.ts'
 import { exportEntries, type ExportSummary } from '../core/encode.ts'
@@ -8,6 +8,12 @@ import { firstPathArg, resolveDbPath } from '../core/shell.ts'
 import type { ThumbEntry } from '../core/types.ts'
 import { CHANNELS, PUSH } from '../shared/ipc.ts'
 import type { ExportOpts, ThemeChoice } from '../shared/ipc.ts'
+import { parseThumbUrl } from '../shared/thumbUrl.ts'
+
+// `thumb://` custom protocol: thumbnail transport. Renderer <img src> points here; Chromium's
+// resource loader owns concurrency/priority/off-screen cancellation/caching/off-thread decode.
+// Must be registered before app is ready.
+protocol.registerSchemesAsPrivileged([{ scheme: 'thumb', privileges: { standard: true, secure: true } }])
 
 // Cache the last parsed file so the renderer can lazily pull image bytes per stream (no base64 up front).
 let current: { path: string; entries: Map<string, ThumbEntry> } | null = null
@@ -142,17 +148,6 @@ ipcMain.handle(CHANNELS.openFile, openViaDialog)
 
 ipcMain.handle(CHANNELS.openPath, (_e, path: string, format?: string) => openPath(path, format))
 
-ipcMain.handle(CHANNELS.getImage, async (_e, streamName: string) => {
-  const entry = current?.entries.get(streamName)
-  if (!entry) return null
-  try {
-    const img = await decode(entry.payload) // total over all payload kinds; abbrev rendered to PNG
-    return { mime: img.mime, bytes: img.bytes } // Buffer -> Uint8Array over IPC
-  } catch {
-    return null // abbrev subsampled/non-baseline decode throws -> entry lists without an image
-  }
-})
-
 ipcMain.handle(CHANNELS.exportThumbs, async (e, opts: ExportOpts) => {
   if (!current) return { error: 'No file open' }
   let outDir: string
@@ -231,6 +226,22 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     Menu.setApplicationMenu(null) // custom in-renderer menubar replaces the native menu
+    // Serve thumbnail bytes for `thumb://img/<version>/<streamName>`. version is the cache-bust
+    // segment (open generation); lookup is by streamName in the current file. Miss or decode
+    // failure -> 404 so the <img> shows its broken/error state (never a perpetual skeleton).
+    protocol.handle('thumb', async (req) => {
+      const name = parseThumbUrl(req.url)
+      const entry = name ? current?.entries.get(name) : undefined
+      if (!entry) return new Response(null, { status: 404 })
+      try {
+        const img = await decode(entry.payload) // total over all payload kinds; abbrev rendered to PNG
+        return new Response(img.bytes, {
+          headers: { 'content-type': img.mime, 'cache-control': 'max-age=31536000, immutable' }
+        })
+      } catch {
+        return new Response(null, { status: 404 }) // abbrev subsampled/non-baseline decode throws
+      }
+    })
     createWindow()
     // OS theme change while running (only fires when themeSource = 'system'): push to renderer for live flip.
     nativeTheme.on('updated', () =>

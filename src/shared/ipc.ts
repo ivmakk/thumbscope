@@ -16,7 +16,6 @@ export type { SizeMode }
 export const CHANNELS = {
   openFile: 'open-file',
   openPath: 'open-path',
-  getImage: 'get-image',
   exportThumbs: 'export-thumbs',
   openFolder: 'open-folder',
   copyText: 'copy-text',
