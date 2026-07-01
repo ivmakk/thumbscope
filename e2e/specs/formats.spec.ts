@@ -13,6 +13,8 @@ const HEALTHY = [
   { sample: 'Thumbs-winxp.db', kind: 'abbrev-jpeg' },
   { sample: 'Thumbs-png.db', kind: 'png' },
   { sample: 'photothumb.db', kind: 'jpeg' }, // exercises the async path-open / SQLite route
+  { sample: 'thumbcache_96.db', kind: 'rgba' }, // thumbcache CMMM, small bucket: BMP-V5 alpha -> rgba
+  { sample: 'thumbcache_1280.db', kind: 'jpeg' }, // thumbcache CMMM, large bucket: JPEG
 ]
 
 for (const { sample, kind } of HEALTHY) {
@@ -31,6 +33,18 @@ for (const { sample, kind } of HEALTHY) {
     })
   })
 }
+
+// thumbcache small bucket: the rgba (transparent) payload draws the checkerboard backdrop in preview.
+test.describe('thumbcache_96.db transparency', () => {
+  test.use({ sample: 'thumbcache_96.db' })
+
+  test('shows the checkerboard backdrop behind a transparent thumbnail', async ({ page, grid, preview }) => {
+    await grid.waitForThumbnails()
+    await grid.select(0)
+    await preview.awaitDecoded()
+    await expect(page.getByTestId('preview-checkerboard')).toBeVisible()
+  })
+})
 
 // Corrupt container: the parser carves raw JPEG runs (10 thumbnails, positional `#n`
 // labels, no dates) -> recovered: true -> the amber recovery banner is shown.

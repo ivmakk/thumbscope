@@ -14,6 +14,13 @@ export async function decode(payload: Payload): Promise<{ mime: string; bytes: B
   if (payload.kind === 'dib') {
     return { mime: 'image/bmp', bytes: dibToBmp(payload.width, payload.height, payload.pixels) }
   }
+  if (payload.kind === 'rgba') {
+    // Straight RGBA -> PNG so the browser renders the alpha channel (BMP can't carry it losslessly here).
+    const bytes = await sharp(payload.pixels, { raw: { width: payload.width, height: payload.height, channels: 4 } })
+      .png()
+      .toBuffer()
+    return { mime: 'image/png', bytes }
+  }
   // abbrev-jpeg: our decoder yields upright packed RGB (reversed-channel copy, no complement, K ignored,
   // already flipped), so sharp just ingests raw RGB and emits a browser-displayable PNG.
   const rgb = decodeAbbrevRgb(payload.data)

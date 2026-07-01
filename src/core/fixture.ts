@@ -283,6 +283,107 @@ export function buildHashedPngDb(): Buffer {
   return Buffer.from(CFB.write(cfb, { type: 'buffer' }) as Uint8Array)
 }
 
+// Build a 32bpp `BM`-wrapped BITMAPV5HEADER bitmap (dibSize 124, BI_BITFIELDS) - the small-bucket
+// thumbcache payload shape. `stored` is the premultiplied BGRA bytes per pixel in top-down row-major
+// order (`[b, g, r, a]`); they're written bottom-up like a real BMP. `masks` overrides the channel
+// masks (default standard BGRA) so a test can exercise the non-standard-mask rejection.
+export function makeBmpV5(
+  width: number,
+  height: number,
+  stored: [number, number, number, number][],
+  opts: { masks?: [number, number, number, number] } = {}
+): Buffer {
+  const masks = opts.masks ?? [0x00ff0000, 0x0000ff00, 0x000000ff, 0xff000000]
+  const dib = 124
+  const dataOffset = 14 + dib
+  const stride = width * 4
+  const buf = Buffer.alloc(dataOffset + stride * height)
+  buf.write('BM', 0, 'ascii')
+  buf.writeUInt32LE(buf.length, 2)
+  buf.writeUInt32LE(dataOffset, 10)
+  buf.writeUInt32LE(dib, 14)
+  buf.writeInt32LE(width, 18)
+  buf.writeInt32LE(height, 22) // positive => bottom-up
+  buf.writeUInt16LE(1, 26)
+  buf.writeUInt16LE(32, 28)
+  buf.writeUInt32LE(3, 30) // BI_BITFIELDS
+  buf.writeUInt32LE(stride * height, 34)
+  buf.writeUInt32LE(masks[0] >>> 0, 54)
+  buf.writeUInt32LE(masks[1] >>> 0, 58)
+  buf.writeUInt32LE(masks[2] >>> 0, 62)
+  buf.writeUInt32LE(masks[3] >>> 0, 66)
+  for (let y = 0; y < height; y++) {
+    const srcY = height - 1 - y // bottom-up file rows from top-down source
+    let d = dataOffset + y * stride
+    for (let x = 0; x < width; x++) {
+      const px = stored[srcY * width + x]
+      buf[d] = px[0] // B
+      buf[d + 1] = px[1] // G
+      buf[d + 2] = px[2] // R
+      buf[d + 3] = px[3] // A
+      d += 4
+    }
+  }
+  return buf
+}
+
+export interface ThumbcacheItem {
+  hash: Buffer // 8-byte ThumbnailCacheId
+  data?: Buffer // payload bytes (default TINY_JPEG); ignored for placeholders
+  placeholder?: boolean // dataSize=0 shell-item (Recycle Bin / CLSID) - walkable, no payload
+  corruptSig?: boolean // write a bad per-entry signature (valid size) to exercise skip-and-continue
+  idStr?: string // override the stored id string (default = hash hex) to vary idStrSize
+}
+
+// One thumbcache cache entry. Own `CMMM` sig + size@4, 8-byte hash@8, then the size fields. Their
+// offsets shift by version: Vista (v20) inserts an 8-byte `Extension[4]` field after the hash, so the
+// fixed header is 56 B and idStrSize/paddingSize/dataSize sit at 24/28/32; Win7 (v21) has no Extension
+// (48 B, fields at 16/20/24); Win8+ (v30+) is 56 B with the fields at the Win7 offsets. After the fixed
+// header come the UTF-16LE id string, padding, then the payload. Entry size is 8-byte aligned.
+function makeThumbcacheEntry(version: number, item: ThumbcacheItem): Buffer {
+  const vista = version === 20
+  const fixed = vista || version >= 30 ? 56 : 48
+  const [idOff, padOff, dataOff] = vista ? [24, 28, 32] : [16, 20, 24]
+  const idStr = Buffer.from((item.idStr ?? item.hash.toString('hex')) + '\0', 'utf16le')
+  const data = item.placeholder ? Buffer.alloc(0) : item.data ?? TINY_JPEG
+  const size = (fixed + idStr.length + data.length + 7) & ~7
+  const buf = Buffer.alloc(size)
+  buf.write(item.corruptSig ? 'XXXX' : 'CMMM', 0, 'ascii')
+  buf.writeUInt32LE(size, 4)
+  item.hash.copy(buf, 8)
+  if (vista) buf.write('jpg\0', 16, 'utf16le') // Extension[4] wchar (8 B), Vista only
+  buf.writeUInt32LE(idStr.length, idOff)
+  buf.writeUInt32LE(0, padOff) // paddingSize
+  buf.writeUInt32LE(data.length, dataOff)
+  idStr.copy(buf, fixed)
+  data.copy(buf, fixed + idStr.length)
+  return buf
+}
+
+// thumbcache-cmmm (Windows Explorer cache): flat, non-OLE2 `CMMM` container. 24-byte file header
+// (`CMMM` + version; field order shifts at ver 30 - empty@12, firstEntry@16, firstAvail@20) then a run
+// of self-delimiting cache entries up to firstAvail (used size). Defaults to a v32 header + one JPEG
+// entry (the detection/routing tracer); pass `version`/`entries` to grow it.
+export function buildThumbcacheDb(opts: { version?: number; entries?: ThumbcacheItem[] } = {}): Buffer {
+  const version = opts.version ?? 32
+  const items = opts.entries ?? [{ hash: Buffer.from('0011223344556677', 'hex') }]
+  const body = Buffer.concat(items.map((it) => makeThumbcacheEntry(version, it)))
+  const firstEntry = 24
+  const firstAvail = firstEntry + body.length
+  const header = Buffer.alloc(24)
+  header.write('CMMM', 0, 'ascii')
+  header.writeUInt32LE(version, 4)
+  header.writeUInt32LE(1, 8) // cache type
+  if (version >= 30) {
+    header.writeUInt32LE(firstEntry, 16) // v30+: empty@12, firstEntry@16, firstAvail@20 (no count)
+    header.writeUInt32LE(firstAvail, 20)
+  } else {
+    header.writeUInt32LE(firstEntry, 12) // v20/21: firstEntry@12, firstAvail@16, count@20
+    header.writeUInt32LE(firstAvail, 16)
+  }
+  return Buffer.concat([header, body])
+}
+
 // Standard JPEG luminance DC Huffman codes (Annex K), category -> [code, bit length]. Matches the
 // table the parser splices into a abbrev-jpeg stream, so a stream built here decodes there.
 const DC_LUM: Record<number, [number, number]> = {

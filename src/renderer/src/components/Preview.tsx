@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { ThumbMeta } from '../../../preload'
 import { PreviewToolbar } from './PreviewToolbar'
 import { getThumbUrl } from '@/lib/imageCache'
+import { needsCheckerboard, CHECKERBOARD_STYLE } from '@/lib/transparency'
 
 // Remembered zoom mode, persisted across app runs. Manual zoom (wheel/buttons) is transient and
 // doesn't change the remembered mode — switching images returns to the last Fit/1:1 choice.
@@ -118,6 +119,9 @@ export function Preview({ entry, version }: { entry: ThumbMeta | null; version: 
         }}
         onPointerUp={() => (drag.current = null)}
       >
+        {url && needsCheckerboard(entry.format) && (
+          <div data-testid="preview-checkerboard" aria-hidden className="absolute inset-0" style={CHECKERBOARD_STYLE} />
+        )}
         {url && (
           <img
             data-testid="preview-image"

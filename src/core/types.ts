@@ -2,6 +2,7 @@ export type Payload =
   | { kind: 'jpeg'; data: Buffer }
   | { kind: 'png'; data: Buffer } // PNG passthrough (hashed-png streams); natively displayable and sharp-ingestable
   | { kind: 'dib'; width: number; height: number; pixels: Buffer } // tightly-packed top-down RGB
+  | { kind: 'rgba'; width: number; height: number; pixels: Buffer } // tightly-packed top-down straight (un-premultiplied) RGBA
   | { kind: 'abbrev-jpeg'; data: Buffer } // reconstructed abbrev-jpeg (XP) JPEG; decodeAbbrevRgb maps it to RGB on use
 
 export interface ThumbEntry {
@@ -23,6 +24,7 @@ export type ContainerFormat =
   | 'irfanview-flat'
   | 'irfanview-nested'
   | 'sqlite-photothumb'
+  | 'thumbcache-cmmm'
   | 'recovered'
 
 export interface ParseResult {

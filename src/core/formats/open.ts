@@ -14,14 +14,25 @@ import type { CfbCtx } from './types.ts'
 import { readCfb } from './internal/cfbToolkit.ts'
 import { carveFallback } from './container/carve.ts'
 import { detectSqlite, parseSqlite } from './container/sqlite.ts'
+import { detectThumbcache, detectIndex, parseThumbcache, assertOpenableSize } from './container/thumbcache.ts'
 import { registry } from './registry.ts'
 
 // Thrown when the input is not an OLE2/CFB compound file at all (vs. a parseable but corrupt one) and
 // nothing could be carved. Lets the caller show a precise message instead of a cryptic cfb error.
 export class NotCfbError extends Error {
   constructor() {
-    super('Not an OLE2 compound file — Thumbs.db / ehthumbs.db files are compound (OLE2) files.')
+    super('Not an OLE2 compound file - Thumbs.db / ehthumbs.db files are compound (OLE2) files.')
     this.name = 'NotCfbError'
+  }
+}
+
+// Thrown when the input is a thumbcache *index* (`thumbcache_idx.db`, IMMM): it maps thumbnail hashes to
+// bucket files but stores no images, so there is nothing to render. A precise message points the user at
+// the sibling image files instead of showing carve-invented broken thumbnails.
+export class ThumbcacheIndexError extends Error {
+  constructor() {
+    super('This is a thumbcache index (thumbcache_idx.db) - it holds no thumbnails, only a lookup table. Open a sibling thumbcache_*.db (e.g. thumbcache_256.db) instead.')
+    this.name = 'ThumbcacheIndexError'
   }
 }
 
@@ -91,8 +102,26 @@ export async function openThumbnailDb(path: string, opts?: OpenOptions): Promise
     // SQLite is auto-routed by path (DatabaseSync reopens it) so the full buffer is never loaded for it -
     // but a {format} override means "skip detection", so it bypasses the header route and runs the
     // buffer tier (sqlite-photothumb is path-tier, not a forceable buffer handler).
-    if (!opts?.format && detectSqlite(bytesRead < 16 ? header.subarray(0, bytesRead) : header)) {
+    const magic = bytesRead < 16 ? header.subarray(0, bytesRead) : header
+    if (!opts?.format && detectSqlite(magic)) {
       return parseSqlite(path)
+    }
+    // thumbcache-cmmm: also header-detected (flat `CMMM`, not OLE2), so it joins the async tier rather
+    // than the CFB registry. Read-at-once for now, so refuse a cache too large to buffer before alloc.
+    if (!opts?.format && detectThumbcache(magic)) {
+      assertOpenableSize((await fh.stat()).size)
+      const buf = await fh.readFile()
+      const result = parseThumbcache(buf)
+      // No live entries carried a payload (only placeholders): the real thumbnails may survive as
+      // complete images in the pre-allocated free space. Carve them, same as the CFB zero-entry path.
+      if (result.count === 0) return carveOr(buf, result)
+      return result
+    }
+    // The sibling IMMM index (`thumbcache_idx.db`) has no image payloads - refuse it here rather than let
+    // the OLE2/carve fallback recover stray byte runs as broken thumbnails. No extra IO: the 16-byte
+    // header is already read, and this skips the whole-file read the carve path would otherwise do.
+    if (!opts?.format && detectIndex(magic)) {
+      throw new ThumbcacheIndexError()
     }
     // OLE2: read the whole file from the same handle (the positional header read left the position at 0),
     // avoiding a second open/read of the same file.

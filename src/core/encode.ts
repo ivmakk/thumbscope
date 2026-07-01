@@ -44,6 +44,17 @@ export async function encodeJpeg(
     if (target) img.resize(target.width, target.height, { kernel: 'lanczos3' }).sharpen()
     return img.jpeg({ quality }).toBuffer()
   }
+  if (payload.kind === 'rgba') {
+    // Straight RGBA (4 channels). JPEG has no alpha, so flatten onto white before encoding - otherwise
+    // sharp would be handed a w*h*4 buffer while told channels:3 and throw a size-mismatch.
+    const img = sharp(payload.pixels, {
+      raw: { width: payload.width, height: payload.height, channels: 4 }
+    }).flatten({ background: '#ffffff' })
+    const target = targetDimensions(payload.width, payload.height, mode)
+    if (target) img.resize(target.width, target.height, { kernel: 'lanczos3' }).sharpen()
+    return img.jpeg({ quality }).toBuffer()
+  }
+  // dib: opaque packed RGB (3 channels).
   const img = sharp(payload.pixels, {
     raw: { width: payload.width, height: payload.height, channels: 3 }
   })
