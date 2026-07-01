@@ -4,6 +4,7 @@ import type { ThumbMeta } from '../../../preload'
 import { ThumbImage } from './ThumbImage'
 import { FileName } from './FileName'
 import { useResetScrollOnVersion } from '@/lib/useResetScrollOnVersion'
+import { needsCheckerboard } from '@/lib/transparency'
 import { cn } from '@/lib/utils'
 
 const LABEL_H = 38 // label + dims rows below the image
@@ -90,6 +91,7 @@ export function BrowseGrid({
                       streamName={e.streamName}
                       version={version}
                       alt={e.label}
+                      backdrop={needsCheckerboard(e)}
                       className="rounded border border-border object-contain"
                       style={{ width: img, height: img }}
                     />

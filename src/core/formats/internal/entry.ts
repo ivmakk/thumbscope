@@ -8,14 +8,14 @@ import { jpegDimensions } from '../codec/jpeg.ts'
 
 // Width/height for an entry: from a decoded DIB, a PNG's IHDR, else the JPEG/CMYK payload's SOF marker.
 function payloadDimensions(payload: Payload): { width: number | null; height: number | null } {
-  if (payload.kind === 'dib') return { width: payload.width, height: payload.height }
+  if (payload.kind === 'dib' || payload.kind === 'rgba') return { width: payload.width, height: payload.height }
   const d = payload.kind === 'png' ? pngDimensions(payload.data) : jpegDimensions(payload.data)
   return { width: d?.width ?? null, height: d?.height ?? null }
 }
 
 // Byte length reported as the entry `size`.
 function payloadSize(payload: Payload): number {
-  return payload.kind === 'dib' ? payload.pixels.length : payload.data.length
+  return payload.kind === 'dib' || payload.kind === 'rgba' ? payload.pixels.length : payload.data.length
 }
 
 export interface EntryFields {

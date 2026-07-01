@@ -17,7 +17,14 @@ test('friendlyError: read/open failure -> could-not-open message', () => {
 test('friendlyError: anything else -> unsupported fallback', () => {
   assert.strictEqual(
     friendlyError('NotCfbError: bad magic'),
-    'Unsupported file — not a Thumbs.db or ehthumbs.db.'
+    'Unsupported file - not a recognized thumbnail database.'
+  )
+})
+
+test('friendlyError: thumbcache index -> surfaces the no-images message (not the generic fallback)', () => {
+  assert.strictEqual(
+    friendlyError('This is a thumbcache index (thumbcache_idx.db) - it holds no thumbnails, only a lookup table. Open a sibling thumbcache_*.db (e.g. thumbcache_256.db) instead.'),
+    'Thumbnail index file - no images inside. Open a sibling thumbcache_*.db (e.g. thumbcache_256.db).'
   )
 })
 

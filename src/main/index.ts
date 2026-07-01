@@ -77,7 +77,8 @@ function toMeta(e: ThumbEntry) {
     format: e.payload.kind,
     width: e.width,
     height: e.height,
-    size: e.size
+    size: e.size,
+    hasAlpha: e.payload.kind === 'rgba' && e.payload.hasAlpha
   }
 }
 

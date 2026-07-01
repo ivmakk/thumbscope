@@ -66,6 +66,30 @@ test('encodeJpeg on a png payload upscales to 800px on the longer side', async (
   assert.strictEqual(meta.width, 800)
 })
 
+// rgba payloads (thumbcache small buckets + carved 32bpp BMPs) must export: JPEG has no alpha, so the
+// straight RGBA is flattened. Before the flatten fix this threw a sharp size-mismatch (4-channel buffer
+// declared as channels:3) and every transparent thumbnail counted as a failed export.
+test('encodeJpeg on an rgba payload flattens alpha to a valid JPEG', async () => {
+  const width = 4
+  const height = 3
+  const pixels = Buffer.alloc(width * height * 4)
+  for (let i = 0; i < pixels.length; i += 4) {
+    pixels[i] = 200
+    pixels[i + 1] = 100
+    pixels[i + 2] = 50
+    pixels[i + 3] = 128 // semi-transparent
+  }
+  const payload: Payload = { kind: 'rgba', width, height, pixels, hasAlpha: true }
+  const jpeg = await encodeJpeg(payload, width, height, 'original', 85)
+  assert.strictEqual(jpeg[0], 0xff)
+  assert.strictEqual(jpeg[1], 0xd8) // SOI
+  const meta = await sharp(jpeg).metadata()
+  assert.strictEqual(meta.format, 'jpeg')
+  assert.strictEqual(meta.width, width)
+  assert.strictEqual(meta.height, height)
+  assert.strictEqual(meta.channels, 3) // alpha flattened out
+})
+
 // End-to-end against the committed photo sample built by `make-sample-thumbsdb.mjs --png`: it must
 // parse as all-png (hashed-png layout, no Catalog) and each thumbnail must re-encode to a valid JPEG.
 test('the committed Thumbs-png.db sample parses as png and exports valid JPEGs', async () => {

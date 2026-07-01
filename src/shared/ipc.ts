@@ -39,10 +39,11 @@ export interface ThumbMeta {
   name: string | null
   label: string
   date: string | null
-  format: 'jpeg' | 'dib' | 'abbrev-jpeg' | 'png'
+  format: 'jpeg' | 'dib' | 'rgba' | 'abbrev-jpeg' | 'png'
   width: number | null
   height: number | null
   size: number
+  hasAlpha: boolean // payload carries a genuinely translucent pixel (real transparency, not just a 32bpp tag)
   orphan: boolean // a real filename whose original no longer exists in the source folder (recoverable)
 }
 

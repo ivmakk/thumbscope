@@ -5,6 +5,7 @@
 
 import type { Payload, ParseResult, ThumbEntry } from '../../types.ts'
 import { PNG_SIG_IHDR } from '../codec/png.ts'
+import { parseBmp, parseBmpRgba, readBmpHeader } from '../codec/bmp.ts'
 import { makeEntry } from '../internal/entry.ts'
 
 const CARVE_MIN_BYTES = 256 // ignore tiny SOI..EOI runs (icons/EXIF noise) when recovering
@@ -67,13 +68,57 @@ function carvePngs(buf: Buffer): Buffer[] {
   return out
 }
 
-// Build entries from raw-carved payloads. JPEG runs are carved first; if none survive, fall back to
-// carving PNG runs (a damaged hashed-png file). No catalog, so labels are positional only.
+// Scan a whole buffer for complete BMP files (`BM` + a BITMAPINFOHEADER/V4/V5, 24/32bpp), non-
+// overlapping. Recovers thumbcache caches whose payloads survive in free space with no live entry (real
+// thumbnails sit in fixed slots past `firstAvail`). Strict validation - declared file size must equal
+// the header + padded rows - keeps stray `BM` byte-pairs from matching. Returns decoded payloads.
+function carveBmps(buf: Buffer): Payload[] {
+  const out: Payload[] = []
+  let i = 0
+  while (i + 54 <= buf.length) {
+    if (buf[i] !== 0x42 || buf[i + 1] !== 0x4d) {
+      i++
+      continue
+    }
+    // Reuse the codec's header validation (magic/dibSize/bpp/bounds) rather than a third private copy.
+    const header = readBmpHeader(buf.subarray(i))
+    if (!header) {
+      i++
+      continue
+    }
+    // The stride-equality against the declared file size is what keeps a stray `BM` byte-pair from
+    // matching and is how we stride to the next candidate - unique to carving, so it stays here.
+    const fileSize = buf.readUInt32LE(i + 2)
+    const stride = (header.width * (header.bpp / 8) + 3) & ~3
+    if (fileSize !== header.dataOffset + stride * header.height || i + fileSize > buf.length) {
+      i++
+      continue
+    }
+    const slice = buf.subarray(i, i + fileSize)
+    // Decode by the known depth: 32bpp keeps its alpha (straight RGBA); 24bpp -> opaque RGB dib.
+    if (header.bpp === 32) {
+      const rgba = parseBmpRgba(slice)
+      if (rgba) out.push({ kind: 'rgba', width: rgba.width, height: rgba.height, pixels: rgba.pixels, hasAlpha: rgba.hasAlpha })
+    } else {
+      const dib = parseBmp(slice)
+      if (dib) out.push({ kind: 'dib', width: dib.width, height: dib.height, pixels: dib.pixels })
+    }
+    i += fileSize
+  }
+  return out
+}
+
+// Build entries from raw-carved payloads. JPEG runs first; if none survive, PNG runs (a damaged
+// hashed-png file); if still none, complete BMP files (an orphaned-payload thumbcache). No catalog, so
+// labels are positional only.
 export function carveFallback(fileBuffer: Buffer): ParseResult {
   const jpegs = carveJpegs(fileBuffer)
-  const payloads: Payload[] = jpegs.length
-    ? jpegs.map((data) => ({ kind: 'jpeg', data }))
-    : carvePngs(fileBuffer).map((data) => ({ kind: 'png', data }))
+  let payloads: Payload[]
+  if (jpegs.length) payloads = jpegs.map((data) => ({ kind: 'jpeg', data }))
+  else {
+    const pngs = carvePngs(fileBuffer)
+    payloads = pngs.length ? pngs.map((data) => ({ kind: 'png', data })) : carveBmps(fileBuffer)
+  }
   const entries: ThumbEntry[] = payloads.map((payload, i) =>
     makeEntry({ index: i + 1, streamName: `carved-${i + 1}`, name: null, label: `#${i + 1}`, date: null, payload })
   )
