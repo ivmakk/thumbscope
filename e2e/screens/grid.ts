@@ -17,6 +17,16 @@ export class GridScreen {
     await this.cell(0).waitFor({ state: 'visible' })
   }
 
+  // Cell presence (waitForThumbnails) only proves the tile mounted - not that its image loaded.
+  // `naturalWidth > 0` on cell 0's <img> proves the whole thumb:// path: parse -> decode ->
+  // protocol handler -> Chromium decode. A broken handler leaves naturalWidth 0 (false-green guard).
+  async awaitFirstImageDecoded(): Promise<void> {
+    await this.page.waitForFunction(() => {
+      const img = document.querySelector('[data-testid="thumb-cell"] img') as HTMLImageElement | null
+      return !!img && img.naturalWidth > 0
+    })
+  }
+
   count(): Promise<number> {
     return this.cells().count()
   }

@@ -41,7 +41,6 @@ export function makeApiMock(): Api {
   return {
     openFile: vi.fn().mockResolvedValue(null),
     openPath: vi.fn().mockResolvedValue(null),
-    getImage: vi.fn().mockResolvedValue(null),
     exportThumbs: vi.fn().mockResolvedValue({ ok: 0, failed: 0, skipped: 0, outDir: '' }),
     openFolder: vi.fn().mockResolvedValue(''),
     copyText: vi.fn().mockResolvedValue(undefined),

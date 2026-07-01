@@ -25,6 +25,7 @@ for (const { sample, kind } of HEALTHY) {
       await grid.waitForThumbnails()
       expect(await grid.count()).toBeGreaterThan(0)
       expect(await grid.payloadKindOf(0)).toBe(kind)
+      await grid.awaitFirstImageDecoded() // proves the thumb:// grid path decoded, not just mounted
 
       await grid.select(0)
       await preview.awaitDecoded()

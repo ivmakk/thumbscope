@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ThumbMeta } from '../../../preload'
 import { PreviewToolbar } from './PreviewToolbar'
-import { getThumbUrl } from '@/lib/imageCache'
+import { thumbUrl } from '@/lib/imageCache'
 import { needsCheckerboard, CHECKERBOARD_STYLE } from '@/lib/transparency'
 
 // Remembered zoom mode, persisted across app runs. Manual zoom (wheel/buttons) is transient and
@@ -10,7 +10,6 @@ const MODE_KEY = 'previewMode'
 const getMode = (): 'fit' | 'one' => (localStorage.getItem(MODE_KEY) === 'one' ? 'one' : 'fit')
 
 export function Preview({ entry, version }: { entry: ThumbMeta | null; version: number }): React.JSX.Element {
-  const [url, setUrl] = useState<string | null>(null)
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [fit, setFit] = useState(() => getMode() === 'fit')
@@ -55,19 +54,17 @@ export function Preview({ entry, version }: { entry: ThumbMeta | null; version: 
 
   useEffect(() => {
     setPan({ x: 0, y: 0 })
-    setUrl(null)
     if (!entry) return
     // Reapply the remembered mode for the new image (1:1 is recomputed per image's dims).
     if (modeRef.current === 'one' && entry.width && entry.height) applyOne()
     else applyFit()
-    let alive = true
-    getThumbUrl(entry.streamName).then((u) => alive && setUrl(u))
-    return () => {
-      alive = false
-    }
     // applyOne/applyFit only read entry, which is the dep; intentionally omitted to avoid re-running.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry])
+
+  // Sync `thumb://` URL - Chromium's loader fetches/caches it. version busts the URL when a new
+  // file reuses stream names.
+  const url = entry ? thumbUrl(entry.streamName, version) : null
 
   const setManualZoom = (next: number): void => {
     setFit(false)

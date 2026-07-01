@@ -29,8 +29,6 @@ const api = {
   // `format` (optional) forces a container handler by slug, skipping detection (manual override).
   openPath: (path: string, format?: string): Promise<OpenResponse> =>
     ipcRenderer.invoke(CHANNELS.openPath, path, format),
-  getImage: (streamName: string): Promise<{ mime: string; bytes: Uint8Array } | null> =>
-    ipcRenderer.invoke(CHANNELS.getImage, streamName),
   exportThumbs: (opts: ExportOpts): Promise<ExportResponse> =>
     ipcRenderer.invoke(CHANNELS.exportThumbs, opts),
   openFolder: (path: string): Promise<string> => ipcRenderer.invoke(CHANNELS.openFolder, path),
