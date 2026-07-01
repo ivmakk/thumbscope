@@ -17,9 +17,11 @@ export function parseThumbUrl(url: string): string | null {
   if (!url.startsWith(PREFIX)) return null
   const rest = url.slice(PREFIX.length)
   const slash = rest.indexOf('/')
-  if (slash < 0) return null
+  if (slash <= 0) return null // require a non-empty version segment before the name
+  const encoded = rest.slice(slash + 1)
+  if (!encoded) return null // empty name segment -> miss
   try {
-    return decodeURIComponent(rest.slice(slash + 1))
+    return decodeURIComponent(encoded)
   } catch {
     return null // malformed percent-escape (e.g. a lone `%`) -> treat as a miss, not a throw
   }

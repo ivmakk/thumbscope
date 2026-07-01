@@ -20,3 +20,8 @@ test('malformed percent-escape → null, not a throw', () => {
   assert.equal(parseThumbUrl('thumb://img/1/%'), null)
   assert.equal(parseThumbUrl('thumb://img/1/%zz'), null)
 })
+
+test('missing version or name segment → null', () => {
+  assert.equal(parseThumbUrl('thumb://img/3/'), null) // empty name
+  assert.equal(parseThumbUrl('thumb://img//21'), null) // empty version
+})
