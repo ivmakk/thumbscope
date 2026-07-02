@@ -25,7 +25,7 @@ import { MenuBar } from '@/components/MenuBar'
 import { friendlyError } from '@/lib/errors'
 import { previewMinPctFor } from '@/lib/layout'
 import { parseThumbSize, DEFAULT_THUMB, THUMB_MIN, THUMB_MAX } from '@/lib/thumbSize'
-import { keyToAction } from '@/lib/keys'
+import { keyToAction, isTypingTarget } from '@/lib/keys'
 import { applyDark, getStoredChoice, storeChoice } from '@/lib/theme'
 import type { ThemeChoice } from '../../preload'
 
@@ -74,7 +74,7 @@ function App(): React.JSX.Element {
 
   // Installed app version for the Help menu (from main's app.getVersion()); fetched once.
   useEffect(() => {
-    window.api.getAppVersion().then(setAppVersion)
+    window.api.getAppVersion().then(setAppVersion, () => {})
   }, [])
 
   // Remember the grid thumbnail size across sessions.
@@ -175,10 +175,7 @@ function App(): React.JSX.Element {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       // Don't hijack Ctrl+A (or others) while typing in a field — e.g. the export dialog.
-      const t = e.target as HTMLElement | null
-      const typing =
-        !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
-      const hit = keyToAction({ ctrlKey: e.ctrlKey, key: e.key, typing })
+      const hit = keyToAction({ ctrlKey: e.ctrlKey, key: e.key, typing: isTypingTarget(e.target) })
       if (!hit) return
       if (hit.preventDefault) e.preventDefault()
       switch (hit.action) {

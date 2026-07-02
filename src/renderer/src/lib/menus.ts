@@ -24,3 +24,8 @@ export const MENUS: MenuMeta[] = [
 export const ACCESS_KEYS: Record<string, string> = Object.fromEntries(
   MENUS.map((m) => [m.accessKey, m.value])
 )
+
+// menu value -> metadata, for the menubar to look up a trigger's label/accessKey by value.
+export const MENU_BY_VALUE: Record<string, MenuMeta> = Object.fromEntries(
+  MENUS.map((m) => [m.value, m])
+)

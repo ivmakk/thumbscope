@@ -43,6 +43,14 @@ test('Alt tap latches mnemonic mode and underlines the access letters', () => {
   expect(underlined).toEqual(['F', 'E', 'V', 'W', 'H'])
 })
 
+test('a mouse press drops mnemonic mode (underlines clear)', () => {
+  const { container } = renderBar()
+  tapAlt()
+  expect(container.querySelectorAll('u')).toHaveLength(5)
+  fireEvent.pointerDown(window)
+  expect(container.querySelector('u')).toBeNull()
+})
+
 test('Alt+H opens Help; items call openExternal with the right URLs', () => {
   renderBar()
   altLetter('h')

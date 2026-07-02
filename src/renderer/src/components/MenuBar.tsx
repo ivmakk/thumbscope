@@ -12,7 +12,7 @@ import {
   MenubarRadioItem
 } from '@/components/ui/menubar'
 import { altReduce, initialAltState, type AltState, type AltEvent } from '@/lib/altMode'
-import { ACCESS_KEYS, MENUS, type MenuMeta } from '@/lib/menus'
+import { ACCESS_KEYS, MENU_BY_VALUE as META, type MenuMeta } from '@/lib/menus'
 import { isTypingTarget } from '@/lib/keys'
 import type { ThemeChoice } from '../../../preload'
 
@@ -32,9 +32,6 @@ function folderOf(p: string): string {
   const i = Math.max(p.lastIndexOf('\\'), p.lastIndexOf('/'))
   return i > 0 ? p.slice(0, i) : p
 }
-
-// value -> menu metadata (label/accessKey), single source in menus.ts.
-const META: Record<string, MenuMeta> = Object.fromEntries(MENUS.map((m) => [m.value, m]))
 
 // A trigger label with its access letter underlined while mnemonic mode is active.
 function TriggerLabel({ meta, active }: { meta: MenuMeta; active: boolean }): React.JSX.Element {
@@ -87,7 +84,9 @@ export function MenuBar({
     barRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
   }, [])
 
-  // Run the transient effects the reducer asked for (focus the bar / restore prior focus).
+  // Run the transient effects the reducer asked for (focus the bar / restore prior focus). Only touch
+  // focus when we actually saved one on entry - a mouse-driven select never entered mnemonic mode, so
+  // savedFocus is null and we must leave the current focus alone (don't blur it).
   const applyEffects = useCallback(
     (effects: { focusBar: boolean; restoreFocus: boolean }): void => {
       if (effects.focusBar) {
@@ -97,12 +96,30 @@ export function MenuBar({
       if (effects.restoreFocus) {
         const el = savedFocus.current
         if (el && el.isConnected) el.focus()
-        else (document.activeElement as HTMLElement | null)?.blur()
         savedFocus.current = null
       }
     },
     [focusFirstTrigger]
   )
+
+  // Apply a reducer result to the render state + effects, skipping setters when nothing changed (this
+  // runs on every keystroke app-wide, incl. while typing, where the reducer returns unchanged state).
+  const commit = useCallback(
+    (r: ReturnType<typeof altReduce>): void => {
+      const prev = altRef.current
+      altRef.current = r.state
+      if (r.state.mode !== prev.mode) setMnemonic(r.state.mode)
+      if (r.state.openMenu !== prev.openMenu) setOpenMenu(r.state.openMenu)
+      if (r.effects.focusBar || r.effects.restoreFocus) applyEffects(r.effects)
+    },
+    [applyEffects]
+  )
+
+  // Exit mnemonic mode on a menu-item activation (keyboard or mouse). Shared by every item and the
+  // theme radios, which don't go through onSelect.
+  const fireSelect = useCallback((): void => {
+    commit(altReduce(altRef.current, { type: 'select' }, { accessKeys: ACCESS_KEYS, suppressed: false }))
+  }, [commit])
 
   // Keep the reducer's openMenu in sync when Radix opens/closes a menu via the mouse (mnemonic stays off).
   const onValueChange = useCallback((v: string): void => {
@@ -113,13 +130,11 @@ export function MenuBar({
   useEffect(() => {
     const isMac = window.api.platform === 'darwin'
 
+    const suppressedNow = (): boolean => isTypingTarget(document.activeElement) || modalRef.current
+
     const dispatch = (ev: AltEvent): ReturnType<typeof altReduce> => {
-      const suppressed = isTypingTarget(document.activeElement) || modalRef.current
-      const r = altReduce(altRef.current, ev, { accessKeys: ACCESS_KEYS, suppressed })
-      altRef.current = r.state
-      setMnemonic(r.state.mode)
-      setOpenMenu(r.state.openMenu)
-      applyEffects(r.effects)
+      const r = altReduce(altRef.current, ev, { accessKeys: ACCESS_KEYS, suppressed: suppressedNow() })
+      commit(r)
       return r
     }
 
@@ -134,8 +149,9 @@ export function MenuBar({
         return
       }
       const prevOpen = altRef.current.openMenu
-      // Bare Alt would otherwise let Chromium/Electron grab focus - swallow it either way.
-      if (e.key === 'Alt' && !e.ctrlKey && !e.shiftKey && !e.metaKey) e.preventDefault()
+      // Bare Alt would otherwise let Chromium/Electron grab focus - swallow it, but not while typing /
+      // a modal is open (mnemonics are suppressed there, so leave the field's own Alt handling intact).
+      if (e.key === 'Alt' && !e.ctrlKey && !e.shiftKey && !e.metaKey && !suppressedNow()) e.preventDefault()
       const r = dispatch({
         type: 'keydown',
         key: e.key,
@@ -149,7 +165,7 @@ export function MenuBar({
 
     const onKeyUp = (e: KeyboardEvent): void => {
       if (isMac || e.key !== 'Alt') return
-      if (!e.ctrlKey && !e.shiftKey && !e.metaKey) e.preventDefault()
+      if (!e.ctrlKey && !e.shiftKey && !e.metaKey && !suppressedNow()) e.preventDefault()
       dispatch({ type: 'keyup', key: e.key })
     }
 
@@ -158,29 +174,36 @@ export function MenuBar({
       dispatch({ type: 'blur' })
     }
 
+    // A mouse press anywhere drops mnemonic mode (underlines off) - covers clicking the workspace or
+    // opening a menu by mouse while latched. In-window clicks fire no window 'blur', so this is the only
+    // signal for it.
+    const onPointerDown = (): void => {
+      if (isMac) return
+      dispatch({ type: 'pointerdown' })
+    }
+
     // Capture phase: our keydown must run *before* Radix's own bubble-phase handlers. Two-stage Esc
     // depends on reading `openMenu` before Radix closes the menu (which would clear it and skip stage 1).
     window.addEventListener('keydown', onKeyDown, true)
     window.addEventListener('keyup', onKeyUp)
     window.addEventListener('blur', onBlur)
+    window.addEventListener('pointerdown', onPointerDown, true)
     return () => {
       window.removeEventListener('keydown', onKeyDown, true)
       window.removeEventListener('keyup', onKeyUp)
       window.removeEventListener('blur', onBlur)
+      window.removeEventListener('pointerdown', onPointerDown, true)
     }
-  }, [applyEffects, focusFirstTrigger])
+  }, [commit, focusFirstTrigger])
 
   // Any menu-item activation exits mnemonic mode and restores focus (reducer 'select').
   const onItemSelect = useCallback(
     (run: () => void) =>
       (): void => {
         run()
-        const r = altReduce(altRef.current, { type: 'select' }, { accessKeys: ACCESS_KEYS, suppressed: false })
-        altRef.current = r.state
-        setMnemonic(r.state.mode)
-        applyEffects(r.effects)
+        fireSelect()
       },
-    [applyEffects]
+    [fireSelect]
   )
 
   return (
@@ -256,7 +279,13 @@ export function MenuBar({
           </MenubarItem>
           <MenubarSeparator />
           <MenubarLabel>Theme</MenubarLabel>
-          <MenubarRadioGroup value={theme} onValueChange={(v) => onThemeChange(v as ThemeChoice)}>
+          <MenubarRadioGroup
+            value={theme}
+            onValueChange={(v) => {
+              onThemeChange(v as ThemeChoice)
+              fireSelect() // radios bypass onSelect - exit mnemonic mode like any other activation
+            }}
+          >
             <MenubarRadioItem value="system">System</MenubarRadioItem>
             <MenubarRadioItem value="light">Light</MenubarRadioItem>
             <MenubarRadioItem value="dark">Dark</MenubarRadioItem>
