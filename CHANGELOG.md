@@ -4,6 +4,8 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-07-02
+
 ### Added
 
 - **Windows Explorer thumbnail cache** (`thumbcache_*.db`) support: reads the flat `CMMM` container across its layout versions, decoding JPEG, PNG, and raw BGRA thumbnails; refuses the `IMMM` index and carves orphaned entries as recovered.
@@ -48,6 +50,7 @@ First public release.
 - `thumbscope` CLI with `list` and `export` commands.
 - Windows NSIS installer with optional context-menu entries and an optional `thumbscope` CLI on PATH.
 
-[Unreleased]: https://github.com/ivmakk/thumbscope/compare/v1.1.0...develop
+[Unreleased]: https://github.com/ivmakk/thumbscope/compare/v1.2.0...develop
+[1.2.0]: https://github.com/ivmakk/thumbscope/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/ivmakk/thumbscope/releases/tag/v1.1.0
 [1.0.0]: https://github.com/ivmakk/thumbscope/releases/tag/v1.0.0
