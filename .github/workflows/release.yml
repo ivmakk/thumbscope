@@ -55,29 +55,13 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run build:cli
-      # Never let electron-builder publish: it emits update-feed metadata (latest*.yml, blockmaps,
-      # the mac update .zip) we don't ship. We build here and upload only the installer explicitly.
-      - run: npx electron-builder --${{ matrix.platform }} --publish never
+      # Publish only for tag pushes; manual runs build without publishing.
+      - run: npx electron-builder --${{ matrix.platform }} ${{ github.event_name == 'push' && '--publish always' || '--publish never' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # macOS build is unsigned/un-notarized for now: skip code signing instead of
           # failing on a missing Developer ID cert. No-op on the Windows runner.
           CSC_IDENTITY_AUTO_DISCOVERY: false
-      # Attach only the installer to the draft release, per platform. The win runner produced only
-      # *-setup.exe, the mac runner only *-arm64.dmg — a single glob across both fails on each runner.
-      # shell: bash so the glob expands (the Windows runner defaults to PowerShell, which passes the
-      # literal pattern to gh). --clobber makes re-runs (e.g. an -rc rehearsal) idempotent.
-      - name: Upload installer to the draft release (tag pushes)
-        if: ${{ github.event_name == 'push' }}
-        shell: bash
-        run: |
-          if [ "${{ matrix.platform }}" = "win" ]; then
-            gh release upload "$GITHUB_REF_NAME" release/*-setup.exe --clobber
-          else
-            gh release upload "$GITHUB_REF_NAME" release/*-arm64.dmg --clobber
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Upload build artifacts (manual dispatch runs)
         if: ${{ github.event_name == 'workflow_dispatch' }}
         uses: actions/upload-artifact@v4
@@ -85,5 +69,6 @@ jobs:
           name: thumbscope-${{ matrix.platform }}
           path: |
             release/*.dmg
+            release/*.zip
             release/*.exe
           if-no-files-found: error

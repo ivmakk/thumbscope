@@ -34,7 +34,7 @@ Prereq: all intended feature/fix PRs already merged into `develop`, and `develop
    npm version <version> --no-git-tag-version
    ```
    The version drives the artifact names (`thumbscope-<version>-arm64.dmg`, the Windows `…-setup.exe`), the app `--version`, and the NSIS upgrade-detect registry - so it must be bumped before tagging.
-3. **Update `CHANGELOG.md`** - rename the existing `## [Unreleased]` heading to `## [<version>] - <YYYY-MM-DD>` (its accumulated entries become the release notes; convert relative dates to absolute), then open a fresh empty `## [Unreleased]` above it. Update the link refs at the bottom: point `[Unreleased]` at `compare/v<version>...develop` and add a `[<version>]` tag link. If `[Unreleased]` is empty at cut time, backfill it from `git log v<prev>..develop` (user-facing changes only).
+3. **Update `CHANGELOG.md`** - add a `## [<version>] - <YYYY-MM-DD>` section (Added / Changed / Fixed). Convert relative dates to absolute.
 4. **Commit** (DCO sign-off + the repo's public identity - see Gotchas):
    ```bash
    git commit -s -m "chore(release): <version>"
@@ -47,8 +47,8 @@ Prereq: all intended feature/fix PRs already merged into `develop`, and `develop
    git tag -a v<version> -m "v<version>"
    git push origin v<version>
    ```
-   Fires `release.yml`: a `draft` job creates the draft release `v<version>`, then the `build` matrix builds win + mac unsigned (`--publish never`) and explicitly uploads **only** the two installers (`*-setup.exe`, `*-arm64.dmg`) to the draft - no `latest*.yml`, blockmaps, or mac `.zip`.
-8. **Finalize the GitHub Release** (manual, by design): open the draft in **Releases**, confirm its assets are **exactly** `*-setup.exe` + `*-arm64.dmg`, replace the placeholder notes with the body template (below), then click **Publish**.
+   Fires `release.yml`: a `draft` job creates the draft release `v<version>`, then the `build` matrix builds win + mac unsigned and uploads with `--publish always`.
+8. **Finalize the GitHub Release** (manual, by design): open the draft in **Releases**, replace the placeholder notes with the CHANGELOG `<version>` section, add the unsigned-open instructions (below), then click **Publish**.
 9. **Sync back to develop:**
    ```bash
    git switch develop && git merge --no-ff main && git push
@@ -59,39 +59,12 @@ Prereq: all intended feature/fix PRs already merged into `develop`, and `develop
 
 Branch off `main` (not develop): `git switch main && git switch -c hotfix/<version>`. Bump patch version + CHANGELOG, PR → `main`, merge, tag `v<version>` (publishes), then **merge `main` back into `develop`** so the fix + bump aren't lost.
 
-## Release body template (step 8)
+## Unsigned-open notes (put in every Release body)
 
-A release body says **what changed in this version and where to get it** - it is not a README. Do **not** paste install steps; README §2 owns those. Structure:
+- **macOS:** unsigned/un-notarized - first launch: right-click (Control-click) → **Open → Open**, or `xattr -dr com.apple.quarantine /Applications/Thumbscope.app`.
+- **Windows:** unsigned - SmartScreen may warn: **More info → Run anyway**.
 
-```markdown
-## Highlights            <- optional; include for a big release
-<one or two lines>
-
-## Changes               <- the full CHANGELOG [version] section, verbatim
-### Added
-- ...
-### Changed
-- ...
-### Fixed
-- ...
-
----
-Unsigned build - Windows: More info -> Run anyway; macOS: right-click -> Open. Full install guide: [README](https://github.com/ivmakk/thumbscope#2-installation).
-```
-
-- Paste the CHANGELOG `[<version>]` section verbatim into **Changes**; add **Highlights** only for a notable release.
-- The **unsigned-open line stays** - it is the one non-obvious install fact (SmartScreen / Gatekeeper block the app without it). **When code-signing lands, drop that line.**
-- Let GitHub append its auto **"Full Changelog: v<prev>...v<version>"** compare link below.
-
-## Pre-tag smoke test (before step 7)
-
-The tag push is the point of no easy return, so validate the actual clean-runner build first. `release.yml`'s **`workflow_dispatch`** builds win + mac with `--publish never` and uploads the installers as *run artifacts* (no release created).
-
-1. On `release/<version>`, trigger the Release workflow via `workflow_dispatch` (Actions tab, or `gh workflow run release.yml --ref release/<version>`).
-2. Download the run artifacts; install and click through on **both** Windows and macOS.
-3. Only once green, proceed to step 7 (tag).
-
-Caveat: `workflow_dispatch` exercises the *build* but **not** the `gh release upload` step - that path was proven once by the `v1.2.0-rc.1` rehearsal (see the release-1.2.0-prep ticket). After tagging, always re-check the draft's assets (step 8) before publishing. See **Gotchas** for the concurrency guard and the don't-re-push-a-tag rule.
+(README §2 has the canonical wording to copy.)
 
 ## Gotchas
 
