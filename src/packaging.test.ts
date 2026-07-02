@@ -20,15 +20,18 @@ test('package.json has a dist:mac script that builds the app + CLI via electron-
   assert.match(dist, /electron-builder --mac/)
 })
 
-test('electron-builder.yml ships an arm64 mac target (dmg + zip) with the icns icon', () => {
+test('electron-builder.yml ships an arm64 mac dmg (only) with the icns icon and no update blockmap', () => {
   const yml = read('electron-builder.yml')
   assert.match(yml, /^mac:/m, 'no mac block')
   assert.match(yml, /icon:\s*build\/icon\.icns/)
   assert.match(yml, /public\.app-category\.utilities/)
-  // Each target must be paired with arm64 (loose `target:.../arch:...` substring checks would pass
-  // even if dmg were x64 and only zip arm64).
+  // dmg must be paired with arm64 (a loose `target:.../arch:...` substring check would pass even if
+  // dmg were x64).
   assert.match(yml, /-\s*target:\s*dmg\s+arch:\s*arm64/)
-  assert.match(yml, /-\s*target:\s*zip\s+arch:\s*arm64/)
+  // No auto-update feed: the mac zip target and the NSIS differential blockmap are dropped so a
+  // release carries only the two installers (see release.yml's selective upload).
+  assert.doesNotMatch(yml, /target:\s*zip/)
+  assert.match(yml, /differentialPackage:\s*false/)
 })
 
 test('electron-builder.yml ships both the CLI payload and the POSIX wrapper into Resources/cli', () => {
@@ -63,8 +66,13 @@ test('release workflow builds both platforms and skips mac signing', () => {
   assert.match(wf, /macos-latest/)
   assert.match(wf, /CSC_IDENTITY_AUTO_DISCOVERY:\s*false/)
   // Gating keys off the EVENT TYPE, not just the ref: a workflow_dispatch run targeting a tag ref
-  // must not publish. Draft + publish only on tag pushes; manual dispatch only uploads artifacts.
+  // must not publish. Draft only on tag pushes; manual dispatch only uploads artifacts.
   assert.match(wf, /if:\s*github\.event_name == 'push' && startsWith\(github\.ref,\s*'refs\/tags\/'\)/)
-  assert.match(wf, /github\.event_name == 'push' && '--publish always' \|\| '--publish never'/)
+  // electron-builder never publishes; we upload only the installer explicitly, per platform, so no
+  // update-feed metadata (latest*.yml, blockmaps, mac zip) reaches the release.
+  assert.match(wf, /electron-builder --\$\{\{ matrix\.platform \}\} --publish never/)
+  assert.doesNotMatch(wf, /--publish always/)
+  assert.match(wf, /gh release upload "\$GITHUB_REF_NAME" release\/\*-setup\.exe --clobber/)
+  assert.match(wf, /gh release upload "\$GITHUB_REF_NAME" release\/\*-arm64\.dmg --clobber/)
   assert.match(wf, /if:\s*\$\{\{\s*github\.event_name == 'workflow_dispatch'\s*\}\}/)
 })
