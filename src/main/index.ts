@@ -186,7 +186,8 @@ ipcMain.handle(CHANNELS.openFolder, (_e, path: string) => shell.openPath(path))
 // External links from the Help menu. Renderer supplies the URL; only open web schemes so a stray
 // file:/javascript: URL can't be launched (guard is a pure, unit-tested fn).
 ipcMain.handle(CHANNELS.openExternal, (_e, url: string) => {
-  if (isAllowedExternalUrl(url)) shell.openExternal(url)
+  // Return the promise so ipcRenderer.invoke awaits it and surfaces failures instead of swallowing them.
+  if (isAllowedExternalUrl(url)) return shell.openExternal(url)
 })
 
 ipcMain.handle(CHANNELS.getAppVersion, () => app.getVersion())

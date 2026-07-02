@@ -89,10 +89,7 @@ export function MenuBar({
   // savedFocus is null and we must leave the current focus alone (don't blur it).
   const applyEffects = useCallback(
     (effects: { focusBar: boolean; restoreFocus: boolean }): void => {
-      if (effects.focusBar) {
-        savedFocus.current = document.activeElement as HTMLElement | null
-        focusFirstTrigger()
-      }
+      if (effects.focusBar) focusFirstTrigger()
       if (effects.restoreFocus) {
         const el = savedFocus.current
         if (el && el.isConnected) el.focus()
@@ -108,9 +105,15 @@ export function MenuBar({
     (r: ReturnType<typeof altReduce>): void => {
       const prev = altRef.current
       altRef.current = r.state
+      // Save prior focus on ANY entry into mnemonic mode: an Alt tap emits focusBar, but Alt+letter
+      // enters with no effect (Radix focuses the opened item), so the save must live here, not in
+      // applyEffects. activeElement is still the pre-entry element at commit time.
+      if (r.state.mode && !prev.mode) savedFocus.current = document.activeElement as HTMLElement | null
       if (r.state.mode !== prev.mode) setMnemonic(r.state.mode)
       if (r.state.openMenu !== prev.openMenu) setOpenMenu(r.state.openMenu)
       if (r.effects.focusBar || r.effects.restoreFocus) applyEffects(r.effects)
+      // Exit that doesn't restore (e.g. blur - focus already left) must still drop the stale ref.
+      if (!r.state.mode && prev.mode && !r.effects.restoreFocus) savedFocus.current = null
     },
     [applyEffects]
   )
