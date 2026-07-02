@@ -6,7 +6,7 @@ When reviewing a pull request, focus on the points below. Flag violations; do no
 
 ## Architecture boundaries
 
-- `src/core/` is pure, platform-agnostic logic shared by main and CLI. It must have **no Electron or DOM imports**. The only allowed Node-only exceptions are the `sharp`-using `encode.ts` and `formats/codec/decode.ts`, the `node:sqlite`-using `photothumb.ts`, and `cfb`. Flag any new Electron/DOM/renderer import that leaks into `src/core/`.
+- `src/core/` is logic shared by main and CLI. It must have **no Electron or DOM imports**. Plain Node built-ins (`node:fs/promises`, etc.) are fine here. Native/heavy deps stay narrowly scoped: `sharp` (in `encode.ts`, `formats/codec/decode.ts`), `node:sqlite` (in `photothumb.ts`), and `cfb`; keep them out of the renderer. Flag any new Electron/DOM/renderer import that leaks into `src/core/`.
 - The renderer is sandboxed (`contextIsolation: true`). All renderer to main communication must go through the typed `window.api` surface in `src/preload/index.ts`, routed through the IPC contract in `src/shared/ipc.ts`. Flag direct `ipcRenderer` use in the renderer or channel strings that bypass `CHANNELS` / `PUSH`.
 - `src/shared/ipc.ts` is the single source of truth for IPC channel names and payload types. A channel rename or new channel should touch this file, main, and preload together. `src/ipc-contract.test.ts` asserts every `CHANNELS` key has a matching `ipcMain.handle`; a new invoke channel needs a handler.
 - Thumbnails render via a `thumb://` `<img>` src, not by pulling image bytes over IPC. The open result carries metadata only. Flag reintroduction of byte-pull IPC for images or a hand-managed blob cache.
@@ -17,14 +17,14 @@ When reviewing a pull request, focus on the points below. Flag violations; do no
 - The parser must **never crash on truncated or corrupt files**. It skips-and-logs per entry and reports a failed count. Flag new parsing code that can throw on malformed input without being caught, or that assumes a field is present.
 - The parser must handle non-ASCII (UTF-16LE) filenames. Do not assume ASCII when decoding catalog names.
 - The catalog header length is real (8 or 16 bytes depending on variant) and must not be clamped or hardcoded to one value.
-- Tier-2 carve recovery runs **only** when the container throws, no handler matched, or a parse found zero thumbs. It must never run on healthy files. Flag changes that broaden when carving triggers.
+- Tier-2 carve recovery runs when the container throws, no handler matched, a parse found zero thumbs, or as a partial-failure rescue (a catalog-less parse left blank streams, `failed > 0`, and carving recovers more entries). It must **never** run on healthy files. Flag changes that broaden when carving triggers.
 - Always treat the source `.db` as read-only; the app is strictly non-destructive. Flag any write, truncate, or open-for-write against an input path.
 - Format byte offsets and header layouts in `formats/open.ts`, the container handlers, and `codec/abbrevJpeg.ts` are subtle and version-dependent; scrutinize any changed offset, length, or magic-byte constant for off-by-one and wrong-variant errors.
 
 ## Privacy and licensing (public repo, release-blocking)
 
 - This is a public repository. Tracked files (code, docs, comments, fixtures, commit messages) must **never** contain a contributor's real local filesystem paths (drive letters, `E:\...`, `/home/<user>/`, `/Users/<user>/`), IP addresses, personal names, or anything identifying a real person or place. Use neutral placeholders (`<corpus>`, `/path/to/sample`, `192.0.2.0`, `Example User`). Flag any such leak - this is a hard blocker.
-- **Never add real `Thumbs.db` / `ehthumbs.db` sample files** to the repo; they contain personal photos. Tests use the synthetic fixture (`src/core/fixture.ts`); committed `sample/*.db` are synthetic and CC0.
+- **Never add real `Thumbs.db` / `ehthumbs.db` sample files** to the repo; they contain personal photos. Tests use the synthetic fixture (`src/core/fixture.ts`); committed `sample/*.db` are generated and SFW (synthetic gradients or CC0/PD photos).
 - License is GPL-3.0-only. Do not edit the `LICENSE` file. Per-file SPDX headers are intentionally not used, so do not request them. Do not transcribe code from the reverse-engineering references (Thumbs Viewer, ThumbnailExpert) - reimplement from format understanding only.
 
 ## Testing conventions
