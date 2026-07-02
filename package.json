@@ -90,7 +90,7 @@
     "png2icons": "^2.0.1",
     "tailwindcss": "^4.3.1",
     "typescript": "^6.0.3",
-    "vite": "^7.3.5",
+    "vite": "^7.3.6",
     "vitest": "^4.1.9"
   },
   "engines": {
