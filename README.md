@@ -159,8 +159,8 @@ npm run build:icons # regenerate the icon set from build/icon.svg (only when art
 
 ### 3.8. Project structure
 
-- `src/core/` - pure, platform-agnostic logic: format detection/parsing/decoding (`formats/`), the export pipeline, and view helpers, shared by main and CLI. No Electron or DOM imports.
-- `src/main/` - Electron main process: window, IPC handlers, the `thumb://` protocol, shell-launch open. `cfb` and `sharp` live here.
+- `src/core/` - pure, platform-agnostic logic: format detection/parsing/decoding (`formats/`), the export pipeline, and view helpers, shared by main and CLI. No Electron or DOM imports; the Node-only native deps (`cfb`, `sharp`) are imported here and never from the renderer.
+- `src/main/` - Electron main process: window, IPC handlers, the `thumb://` protocol, shell-launch open.
 - `src/preload/` - the `contextBridge` API surface (`window.api`).
 - `src/shared/` - cross-process code with no Electron/DOM imports: the typed IPC contract (`ipc.ts`) and the `thumb://` URL builder.
 - `src/renderer/` - sandboxed React page (menubar, grid, table, preview, export dialog).
