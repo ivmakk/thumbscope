@@ -48,6 +48,37 @@ test('keyToAction: F11 toggles fullscreen with preventDefault', () => {
   })
 })
 
+test('keyToAction: Ctrl+= / Ctrl++ zoom in (preventDefault)', () => {
+  assert.deepStrictEqual(keyToAction({ ctrlKey: true, key: '=', typing: false }), {
+    action: 'zoom-in',
+    preventDefault: true
+  })
+  assert.strictEqual(keyToAction({ ctrlKey: true, key: '+', typing: false })?.action, 'zoom-in')
+})
+
+test('keyToAction: Ctrl+- / Ctrl+_ zoom out (preventDefault)', () => {
+  assert.deepStrictEqual(keyToAction({ ctrlKey: true, key: '-', typing: false }), {
+    action: 'zoom-out',
+    preventDefault: true
+  })
+  assert.strictEqual(keyToAction({ ctrlKey: true, key: '_', typing: false })?.action, 'zoom-out')
+})
+
+test('keyToAction: Ctrl+0 resets zoom (preventDefault)', () => {
+  assert.deepStrictEqual(keyToAction({ ctrlKey: true, key: '0', typing: false }), {
+    action: 'zoom-reset',
+    preventDefault: true
+  })
+})
+
+test('keyToAction: zoom keys fire even while typing', () => {
+  assert.strictEqual(keyToAction({ ctrlKey: true, key: '0', typing: true })?.action, 'zoom-reset')
+})
+
+test('keyToAction: zoom keys need Ctrl', () => {
+  assert.strictEqual(keyToAction({ ctrlKey: false, key: '0', typing: false }), null)
+})
+
 test('keyToAction: unmapped key -> null', () => {
   assert.strictEqual(keyToAction({ ctrlKey: false, key: 'x', typing: false }), null)
   assert.strictEqual(keyToAction({ ctrlKey: true, key: 's', typing: false }), null)

@@ -25,7 +25,7 @@ import { MenuBar } from '@/components/MenuBar'
 import { friendlyError } from '@/lib/errors'
 import { previewMinPctFor } from '@/lib/layout'
 import { parseThumbSize, DEFAULT_THUMB, THUMB_MIN, THUMB_MAX } from '@/lib/thumbSize'
-import { keyToAction } from '@/lib/keys'
+import { keyToAction, isTypingTarget } from '@/lib/keys'
 import { applyDark, getStoredChoice, storeChoice } from '@/lib/theme'
 import type { ThemeChoice } from '../../preload'
 
@@ -62,6 +62,7 @@ function App(): React.JSX.Element {
   const [dragging, setDragging] = useState(false)
   const [orphanFilter, setOrphanFilter] = useState(false) // show only recoverable (orphan) thumbs
   const [theme, setThemeState] = useState<ThemeChoice>(getStoredChoice)
+  const [appVersion, setAppVersion] = useState('')
   // Store the coarse percent (not raw width) so setting it to the same value on most
   // resize ticks bails the re-render — only a boundary crossing re-renders App.
   const [previewMinPct, setPreviewMinPct] = useState(() => previewMinPctFor(window.innerWidth))
@@ -69,6 +70,11 @@ function App(): React.JSX.Element {
     const onResize = (): void => setPreviewMinPct(previewMinPctFor(window.innerWidth))
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  // Installed app version for the Help menu (from main's app.getVersion()); fetched once.
+  useEffect(() => {
+    window.api.getAppVersion().then(setAppVersion, () => {})
   }, [])
 
   // Remember the grid thumbnail size across sessions.
@@ -169,10 +175,7 @@ function App(): React.JSX.Element {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       // Don't hijack Ctrl+A (or others) while typing in a field — e.g. the export dialog.
-      const t = e.target as HTMLElement | null
-      const typing =
-        !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
-      const hit = keyToAction({ ctrlKey: e.ctrlKey, key: e.key, typing })
+      const hit = keyToAction({ ctrlKey: e.ctrlKey, key: e.key, typing: isTypingTarget(e.target) })
       if (!hit) return
       if (hit.preventDefault) e.preventDefault()
       switch (hit.action) {
@@ -181,6 +184,9 @@ function App(): React.JSX.Element {
         case 'select-all': doSelectAll(); break
         case 'toggle-devtools': window.api.windowAction('toggle-devtools'); break
         case 'toggle-fullscreen': window.api.windowAction('toggle-fullscreen'); break
+        case 'zoom-in': window.api.windowAction('zoom-in'); break
+        case 'zoom-out': window.api.windowAction('zoom-out'); break
+        case 'zoom-reset': window.api.windowAction('zoom-reset'); break
       }
     }
     window.addEventListener('keydown', onKey)
@@ -229,6 +235,8 @@ function App(): React.JSX.Element {
         filePath={result?.path ?? null}
         theme={theme}
         onThemeChange={setTheme}
+        appVersion={appVersion}
+        modalOpen={exportOpen}
       />
       <header className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-1.5">
         <Button size="sm" className="h-7" onClick={doOpen} disabled={loading}>

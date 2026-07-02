@@ -21,7 +21,9 @@ export const CHANNELS = {
   copyText: 'copy-text',
   windowAction: 'window-action',
   setTheme: 'set-theme',
-  getTheme: 'get-theme'
+  getTheme: 'get-theme',
+  openExternal: 'open-external',
+  getAppVersion: 'get-app-version'
 } as const
 
 // Push channels: main -> renderer one-way (webContents.send / ipcRenderer.on). Not part of the

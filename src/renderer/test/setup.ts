@@ -50,7 +50,10 @@ export function makeApiMock(): Api {
     setTheme: vi.fn().mockResolvedValue(false),
     getTheme: vi.fn().mockResolvedValue(false),
     onThemeUpdated: vi.fn().mockReturnValue(noopUnsub),
-    pathForFile: vi.fn().mockReturnValue('')
+    pathForFile: vi.fn().mockReturnValue(''),
+    openExternal: vi.fn().mockResolvedValue(undefined),
+    getAppVersion: vi.fn().mockResolvedValue('1.1.0'),
+    platform: 'win32'
   }
 }
 
