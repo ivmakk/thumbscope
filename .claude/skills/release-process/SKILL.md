@@ -76,7 +76,9 @@ A release body says **what changed in this version and where to get it** - it is
 - ...
 
 ---
-Unsigned build - Windows: More info -> Run anyway; macOS: right-click -> Open. Full install guide: [README](https://github.com/ivmakk/thumbscope#2-installation).
+NOTE: builds are unsigned. On first run (details in [README → Installation](https://github.com/ivmakk/thumbscope#2-installation)):
+* Windows: More info → Run anyway
+* macOS: right-click → Open
 ```
 
 - Paste the CHANGELOG `[<version>]` section verbatim into **Changes**; add **Highlights** only for a notable release.

@@ -145,7 +145,7 @@ Runs `tsgo --noEmit` (the TypeScript 7 native compiler, `@typescript/native-prev
 ```sh
 npm run build       # production build into out/ (no type-check)
 npm run dist:win    # full Windows NSIS installer (build + bundled CLI) -> release/
-npm run dist:mac    # macOS arm64 .dmg + .zip (build + bundled CLI) -> release/
+npm run dist:mac    # macOS arm64 .dmg (build + bundled CLI) -> release/
 npm run pack:dir    # unpacked build, no installer, for quick inspection
 npm run build:icons # regenerate the icon set from build/icon.svg (only when art changes)
 ```

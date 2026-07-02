@@ -74,5 +74,8 @@ test('release workflow builds both platforms and skips mac signing', () => {
   assert.doesNotMatch(wf, /--publish always/)
   assert.match(wf, /gh release upload "\$GITHUB_REF_NAME" release\/\*-setup\.exe --clobber/)
   assert.match(wf, /gh release upload "\$GITHUB_REF_NAME" release\/\*-arm64\.dmg --clobber/)
+  // The upload step must be gated on the push event, so a workflow_dispatch (manual) run - whose
+  // GITHUB_REF_NAME is a branch, not a tag with a draft release - never runs `gh release upload`.
+  assert.match(wf, /if:\s*\$\{\{\s*github\.event_name == 'push'\s*\}\}/)
   assert.match(wf, /if:\s*\$\{\{\s*github\.event_name == 'workflow_dispatch'\s*\}\}/)
 })
