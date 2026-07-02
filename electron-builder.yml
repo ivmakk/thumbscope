@@ -36,8 +36,6 @@ mac:
   target:
     - target: dmg
       arch: arm64
-    - target: zip
-      arch: arm64
   artifactName: ${name}-${version}-${arch}.${ext}
 win:
   icon: build/icon.ico
@@ -46,6 +44,8 @@ win:
 nsis:
   oneClick: false
   perMachine: true
+  # No auto-update feed: skip the differential-package blockmap (unused metadata asset).
+  differentialPackage: false
   allowToChangeInstallationDirectory: true
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

@@ -65,6 +65,7 @@ and any manual GUI/CLI checks. For packaging changes, say what was built/run.>
 - [x] Self-reviewed the diff
 - [x] `npm test` and `npm run typecheck` pass
 - [x] Docs updated (README / CLAUDE.md / DESIGN.md) where relevant
+- [x] Added a `CHANGELOG.md` `## [Unreleased]` entry (user-facing change) or n/a (internal-only)
 - [x] No real local paths or PII in tracked files (public repo)
 ```
 
