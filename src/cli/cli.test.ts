@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { buildThumbsDb } from '../core/fixture.ts'
+import { buildThumbsDb, buildThumbcacheDb } from '../core/fixture.ts'
 import { cmdExport, cmdList } from './commands.ts'
 
 const tmp = (): Promise<string> => mkdtemp(join(tmpdir(), 'tdbcli-'))
@@ -106,6 +106,35 @@ test('cmdExport: non-CFB input exits 1, no crash', async () => {
   await rm(dir, { recursive: true, force: true })
 })
 
+test('cmdExport --format cfb forces the cfb handler and exports normally', async () => {
+  const dir = await tmp()
+  const db = join(dir, 'Thumbs.db')
+  await writeFile(db, buildThumbsDb())
+  const out = join(dir, 'out')
+
+  const { code, err } = await capture(() =>
+    cmdExport(db, { out, mode: 'original', quality: '80', csv: false, overwrite: false, format: 'cfb' })
+  )
+  assert.equal(code, 0)
+  assert.match(err, /3 exported/)
+
+  await rm(dir, { recursive: true, force: true })
+})
+
+test('cmdExport --format with an unknown slug errors out, exit 1', async () => {
+  const dir = await tmp()
+  const db = join(dir, 'Thumbs.db')
+  await writeFile(db, buildThumbsDb())
+
+  const { code, err } = await capture(() =>
+    cmdExport(db, { out: join(dir, 'o'), mode: 'original', quality: '80', csv: false, overwrite: false, format: 'no-such' })
+  )
+  assert.equal(code, 1)
+  assert.match(err, /Unknown --format handler/)
+
+  await rm(dir, { recursive: true, force: true })
+})
+
 test('cmdList --csv writes header + one row per thumbnail; accepts a folder', async () => {
   const dir = await tmp()
   await writeFile(join(dir, 'Thumbs.db'), buildThumbsDb())
@@ -138,6 +167,23 @@ test('cmdList table: prints a header row, then one row per thumbnail', async () 
   const lines = out.join('').trimEnd().split('\n')
   assert.match(lines[0], /^#\s+NAME\s+SIZE\s+DATE\s+DIMS$/)
   assert.equal(lines.length, 4) // header + 3 rows
+
+  await rm(dir, { recursive: true, force: true })
+})
+
+test('cmdList: a thumbcache CMMM file lists entries labeled by hex ThumbnailCacheId', async () => {
+  const dir = await tmp()
+  const db = join(dir, 'thumbcache_1280.db') // pass the file directly (not a Thumbs.db folder)
+  await writeFile(db, buildThumbcacheDb())
+  const csv = join(dir, 'meta.csv')
+
+  const { code } = await capture(() => cmdList(db, { csv }))
+  assert.equal(code, 0)
+  const lines = (await readFile(csv, 'utf8')).trim().split('\r\n')
+  assert.equal(lines[0], 'id,filename,size,date,width,height')
+  assert.equal(lines.length, 2) // header + 1 entry
+  // filename column = the hex hash of the single fixture entry (no real filename in the format)
+  assert.match(lines[1], /,0011223344556677,/)
 
   await rm(dir, { recursive: true, force: true })
 })

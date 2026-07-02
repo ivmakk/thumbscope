@@ -11,9 +11,7 @@ import {
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
-
-type Scope = 'selected' | 'orphans' | 'all'
-type Dest = 'pick' | 'source'
+import { buildExportOpts, selectionCount, type Scope, type Dest } from '@/lib/exportOpts'
 
 // Export preferences remembered across sessions.
 const SKIP_KEY = 'export.skipExisting'
@@ -60,7 +58,7 @@ export function ExportDialog({
     return window.api.onExportProgress((p) => setProgress(p))
   }, [busy])
 
-  const count = scope === 'selected' ? selectedIds.length : scope === 'orphans' ? orphanIds.length : totalCount
+  const count = selectionCount({ scope, selectedIds, orphanIds, totalCount })
 
   const doExport = async (): Promise<void> => {
     setBusy(true)
@@ -68,14 +66,9 @@ export function ExportDialog({
     setOutDir(null)
     setProgress({ done: 0, total: count })
     try {
-      const r = await window.api.exportThumbs({
-        streamNames: scope === 'all' ? null : scope === 'orphans' ? orphanIds : selectedIds,
-        mode,
-        quality,
-        includeCsv,
-        skipExisting,
-        toSourceFolder: dest === 'source'
-      })
+      const r = await window.api.exportThumbs(
+        buildExportOpts({ scope, selectedIds, orphanIds, totalCount, mode, quality, includeCsv, skipExisting, dest })
+      )
       if (!r) return // folder pick cancelled
       if ('error' in r) {
         setSummary(`⚠ ${r.error}`)

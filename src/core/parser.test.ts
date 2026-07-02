@@ -3,8 +3,9 @@ import assert from 'node:assert'
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { parseThumbsDb, NotCfbError } from './parser.ts'
-import { buildThumbsDb, buildEhThumbsDb, buildGuidDb, buildVistaDb, buildIrfanThumbsDb, buildIrfanNestedThumbsDb } from './fixture.ts'
-import { dibToBmp } from './image.ts'
+import { decodeAbbrevRgb } from './formats/codec/abbrevJpeg.ts'
+import { buildThumbsDb, buildEhThumbsDb, buildGuidDb, buildVistaDb, buildHashedPngDb, buildIrfanThumbsDb, buildIrfanNestedThumbsDb, buildAbbrevJpegDb } from './fixture.ts'
+import { dibToBmp } from './formats/codec/dib.ts'
 
 test('parses all thumbnails from a synthetic Thumbs.db', () => {
   const r = parseThumbsDb(buildThumbsDb())
@@ -90,6 +91,23 @@ test('parses Vista size_hash streams with no Catalog (JPEG behind 24-byte prefix
   assert.strictEqual(e.payload.kind, 'jpeg')
 })
 
+test('parses hashed-png size_hash streams with no Catalog (PNG behind 24-byte prefix)', () => {
+  const r = parseThumbsDb(buildHashedPngDb())
+  assert.strictEqual(r.catalogCount, 0)
+  assert.strictEqual(r.count, 2)
+  assert.strictEqual(r.failed, 0)
+  assert.strictEqual(r.recovered, false)
+  const e = r.entries[0]
+  assert.strictEqual(e.index, null)
+  assert.strictEqual(e.name, null)
+  assert.strictEqual(e.label, '24ecf3db3592c791') // hash after underscore
+  assert.strictEqual(e.payload.kind, 'png') // not misrouted to jpeg/dib
+  assert.strictEqual(e.width, 3) // from IHDR
+  assert.strictEqual(e.height, 2)
+  // 24-byte MS prefix stripped: payload starts at the PNG signature.
+  assert.deepStrictEqual([...e.payload.data.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+})
+
 test('parses IrfanView ivThumbs.db (filename streams, BMP payloads, no catalog)', () => {
   const r = parseThumbsDb(buildIrfanThumbsDb())
   assert.strictEqual(r.count, 2)
@@ -130,6 +148,74 @@ test('parses nested IrfanView (no start sectors) by carving BMP blocks, dropping
   assert.strictEqual(r.entries[0].height, 6)
   assert.strictEqual(r.entries[0].date.toISOString(), '2007-12-27T13:36:14.000Z')
   assert.strictEqual(r.entries[2].date.toISOString(), '2007-12-27T13:36:16.000Z')
+})
+
+test('reconstructs abbrev-jpeg streams into SOI+APP0 | 2xDQT | SOF | DHT | scan, no Adobe marker', () => {
+  const r = parseThumbsDb(buildAbbrevJpegDb())
+  const e = r.entries.find((x) => x.index === 1)
+  assert.ok(e)
+  assert.strictEqual(e.payload.kind, 'abbrev-jpeg')
+  if (e.payload.kind !== 'abbrev-jpeg') return
+  const b = e.payload.data
+  // Walk the header markers up to the scan; record marker order.
+  assert.strictEqual(b[0], 0xff)
+  assert.strictEqual(b[1], 0xd8) // SOI
+  const markers: number[] = []
+  let i = 2
+  let sof = -1
+  while (i + 3 < b.length) {
+    assert.strictEqual(b[i], 0xff, 'aligned on a marker')
+    const m = b[i + 1]
+    markers.push(m)
+    if (m === 0xc0) sof = i // the SOF0 marker (0xff) offset
+    if (m === 0xda) break // SOS — scan follows
+    const len = (b[i + 2] << 8) | b[i + 3]
+    i += 2 + len
+  }
+  assert.strictEqual(markers[0], 0xe0, 'APP0 (JFIF) first')
+  assert.strictEqual(markers.filter((m) => m === 0xdb).length, 2, 'exactly two DQT segments')
+  assert.strictEqual(markers.filter((m) => m === 0xee).length, 0, 'no APP14/Adobe marker')
+  assert.strictEqual(markers.filter((m) => m === 0xc0).length, 1, 'one SOF0')
+  assert.strictEqual(markers.filter((m) => m === 0xc4).length, 2, 'two DHT segments (DC + AC)')
+  assert.strictEqual(markers[markers.length - 1], 0xda, 'ends at the scan')
+  // SOF carries the 4 components tagged R,G,B,A — the spliced frame came from the source stream.
+  // From the 0xff marker: len@+2, precision@+4, height@+5, width@+7, ncomp@+9, comp ids @+10/+13/+16/+19.
+  assert.ok(sof > 0)
+  assert.strictEqual(b[sof + 9], 4) // component count
+  assert.deepStrictEqual([b[sof + 10], b[sof + 13], b[sof + 16], b[sof + 19]], [0x52, 0x47, 0x42, 0x41])
+})
+
+test('reconstructs abbrev-jpeg (headerless XP) streams and decodes them to faithful RGB', () => {
+  const r = parseThumbsDb(buildAbbrevJpegDb())
+  assert.strictEqual(r.count, 2)
+  assert.strictEqual(r.failed, 0)
+  const e = r.entries.find((x) => x.index === 1)
+  assert.ok(e)
+  assert.strictEqual(e.name, 'PICT0001.JPG') // catalog name preserved
+  assert.strictEqual(e.payload.kind, 'abbrev-jpeg') // reconstructed, not raw headerless JPEG passthrough
+  assert.strictEqual(e.width, 16) // dims read from the spliced SOF
+  assert.strictEqual(e.height, 16)
+  if (e.payload.kind === 'abbrev-jpeg') {
+    // index 1 stores components [c0,c1,c2,c3] = [60,40,150,230]; the decoder maps R=c2, G=c1, B=c0 and
+    // ignores the 4th, yielding a single uniform, non-degenerate color across the frame.
+    const { width, height, pixels } = decodeAbbrevRgb(e.payload.data)
+    assert.strictEqual(width, 16)
+    assert.strictEqual(height, 16)
+    assert.strictEqual(pixels.length, 16 * 16 * 3)
+    const [r0, g0, b0] = pixels
+    assert.ok(Math.abs(r0 - 150) <= 1, 'R = c2')
+    assert.ok(Math.abs(g0 - 40) <= 1, 'G = c1')
+    assert.ok(Math.abs(b0 - 60) <= 1, 'B = c0')
+    let uniform = true
+    for (let p = 0; p < width * height; p++) {
+      if (Math.abs(pixels[p * 3] - r0) > 1 || Math.abs(pixels[p * 3 + 1] - g0) > 1 || Math.abs(pixels[p * 3 + 2] - b0) > 1) {
+        uniform = false
+        break
+      }
+    }
+    assert.ok(uniform, 'a solid stream decodes to a uniform RGB color')
+    assert.ok(r0 + g0 + b0 > 12 && r0 + g0 + b0 < 753, 'not degenerate all-black / all-white')
+  }
 })
 
 test('falls back from GUID names to an index label', () => {
@@ -204,6 +290,23 @@ test('keeps a truncated (no-EOI) JPEG when recovering', () => {
   const r = parseThumbsDb(partial)
   assert.strictEqual(r.recovered, true)
   assert.strictEqual(r.count, 1)
+})
+
+// 64x64 PNG (560 bytes, over the carve floor), used to exercise PNG recovery carving.
+const BIG_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAB4klEQVRogWNgSDyk3PLUbTlH5intnrd+6wUKLxlP+Rq2XaLylvWcv3H7FRofOS9hTTuu0fnKew1v3nmDiZ+Ct4iWXbeY+St6j2zdfYeFTMlHVNuee6zkyj6j2/c+YKNQ8RXTad8jdkpV37Gd9z/hoFLzE9dl7Bkntbrf+K7jL7hoNPlL6DbxiptWs//E7pNveOi0mCX1mHrHS6/VPLnn9Cd8DNosUnrNfMbPqN0ytffsFzAmHVZpfea+gjPrtE7vO/8NgkWXTaZ+C98hWXXbZu6/eIYDik2PXZaypZ/Q7Hrts5Yv/4LhpM8hW8XKb1jO+h2zV67+geMi5pSjau0vPFdx55zV6/8QuEm45KrZ9B+Ru6Rr7trNH+gAYKA0BAY6ABgGOgkcoDQABjoJNIzmgYejeWDxaB5IHa0Hjo3WAx2j9YDXaFto9WhbKHe0LaQ/2h+YMNofCBrtD4iM9olLR/vE5qN94p+j40JRo+NCMqPjQvdGx0btR8dGGUfHRg+Pzg+ojM4PPBudH1gxOkfGOTpHdnp0jqx3dJ743eg88YbReeKi0bUSl0fXSkwdXSsRPrpeaMfoeqGq0fVCo2vmbEbXzP0bXTPHMNDLJh1G140uHF03mjy6blR1dO1025BdOw0AAGHpWv2hQacAAAAASUVORK5CYII=',
+  'base64'
+)
+
+test('recovers PNGs from a damaged / non-CFB container when no JPEG survives', () => {
+  const buf = Buffer.concat([Buffer.alloc(32, 0), BIG_PNG])
+  const r = parseThumbsDb(buf)
+  assert.strictEqual(r.recovered, true)
+  assert.strictEqual(r.count, 1)
+  assert.strictEqual(r.entries[0].payload.kind, 'png')
+  assert.strictEqual(r.entries[0].label, '#1')
+  assert.strictEqual(r.entries[0].width, 64)
+  assert.strictEqual(r.entries[0].height, 64)
 })
 
 test('healthy file is not flagged as recovered', () => {

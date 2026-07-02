@@ -1,6 +1,6 @@
 {
   "name": "thumbscope",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "View and export thumbnails from Windows Thumbs.db / ehthumbs.db files",
   "type": "module",
   "main": "./out/main/index.js",
@@ -14,8 +14,15 @@
     "cli": "node src/cli/index.ts",
     "build:cli": "node scripts/build-cli.mjs",
     "build:icons": "node scripts/build-icons.mjs",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "typecheck": "tsgo --noEmit -p tsconfig.node.json && tsgo --noEmit -p tsconfig.web.json && tsgo --noEmit -p e2e/tsconfig.json",
+    "typecheck:tsc": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p e2e/tsconfig.json",
     "test": "node --test \"src/**/*.test.ts\"",
+    "test:core": "node --test \"src/core/**/*.test.ts\"",
+    "test:renderer": "vitest run",
+    "test:all": "npm test && npm run test:renderer",
+    "pretest:e2e": "electron-vite build",
+    "test:e2e": "playwright test -c e2e/playwright.config.ts",
+    "e2e": "npm run test:e2e",
     "pack:dir": "electron-vite build && npm run build:cli && electron-builder --dir",
     "dist:win": "electron-vite build && npm run build:cli && electron-builder --win",
     "dist:mac": "electron-vite build && npm run build:cli && electron-builder --mac"
@@ -46,6 +53,7 @@
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
     "@radix-ui/react-dialog": "^1.1.17",
+    "@radix-ui/react-dropdown-menu": "^2.1.18",
     "@radix-ui/react-menubar": "^1.1.18",
     "@radix-ui/react-scroll-area": "^1.2.12",
     "@radix-ui/react-select": "^2.3.1",
@@ -64,19 +72,26 @@
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/vite": "^4.3.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^26.0.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@typescript/native-preview": "latest",
     "@vitejs/plugin-react": "^5.2.0",
     "electron": "^42.4.1",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "esbuild": "^0.28.1",
+    "happy-dom": "^20.10.6",
     "png2icons": "^2.0.1",
     "tailwindcss": "^4.3.1",
     "typescript": "^6.0.3",
-    "vite": "^7.3.5"
+    "vite": "^7.3.6",
+    "vitest": "^4.1.9"
   },
   "engines": {
     "node": ">=24"

@@ -1,21 +1,41 @@
 import { join, dirname } from 'node:path'
-import { readFile, readdir } from 'node:fs/promises'
-import { app, BrowserWindow, dialog, ipcMain, shell, clipboard, Menu, nativeTheme } from 'electron'
-import { parseThumbsDb } from '../core/parser.ts'
-import { payloadToImage } from '../core/image.ts'
+import { readdir } from 'node:fs/promises'
+import { app, BrowserWindow, dialog, ipcMain, shell, clipboard, Menu, nativeTheme, protocol } from 'electron'
+import { openThumbnailDb } from '../core/formats/open.ts'
+import { decode } from '../core/formats/codec/decode.ts'
 import { exportEntries, type ExportSummary } from '../core/encode.ts'
-import type { SizeMode } from '../core/export.ts'
 import { firstPathArg, resolveDbPath } from '../core/shell.ts'
 import type { ThumbEntry } from '../core/types.ts'
+import { CHANNELS, PUSH } from '../shared/ipc.ts'
+import type { ExportOpts, ThemeChoice } from '../shared/ipc.ts'
+import { isAllowedExternalUrl } from '../shared/externalUrl.ts'
+import { parseThumbUrl } from '../shared/thumbUrl.ts'
+
+// `thumb://` custom protocol: thumbnail transport. Renderer <img src> points here; Chromium's
+// resource loader owns concurrency/priority/off-screen cancellation/caching/off-thread decode.
+// Must be registered before app is ready.
+protocol.registerSchemesAsPrivileged([{ scheme: 'thumb', privileges: { standard: true, secure: true } }])
 
 // Cache the last parsed file so the renderer can lazily pull image bytes per stream (no base64 up front).
 let current: { path: string; entries: Map<string, ThumbEntry> } | null = null
 let mainWindow: BrowserWindow | null = null
 
+// E2E_HIDE_WINDOW: local headless-style runs. Park the window off-screen, off the taskbar, and never
+// activate it (showInactive + no focus), so it neither appears nor steals focus while tests drive
+// it over CDP. It stays *shown* (visibilityState 'visible') so Chromium does not throttle
+// rAF/timers - render-timing tests stay fast.
+const E2E_HIDE_WINDOW = process.env['E2E_HIDE_WINDOW'] === '1'
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1280,
     height: 860,
+    ...(E2E_HIDE_WINDOW ? { x: -3200, y: -3200, skipTaskbar: true } : {}),
+    // Floor the window size so the two-panel layout (and the preview control bar at the
+    // preview panel's minimum width) can't be squeezed to clipping at extreme small
+    // widths. The panel minimum is a dynamic ~150px floor computed in the renderer.
+    minWidth: 720,
+    minHeight: 520,
     show: false,
     // Packaged builds use the exe-embedded icon; in dev point at the source PNG so the
     // taskbar/window show branding (import.meta.dirname is out/main -> repo build/).
@@ -23,7 +43,8 @@ function createWindow(): void {
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.mjs'),
       contextIsolation: true,
-      sandbox: false
+      sandbox: false,
+      backgroundThrottling: !E2E_HIDE_WINDOW
     }
   })
   mainWindow = win
@@ -31,7 +52,7 @@ function createWindow(): void {
     if (mainWindow === win) mainWindow = null
   })
 
-  win.on('ready-to-show', () => win.show())
+  win.on('ready-to-show', () => (E2E_HIDE_WINDOW ? win.showInactive() : win.show()))
 
   if (process.env['ELECTRON_RENDERER_URL']) {
     win.loadURL(process.env['ELECTRON_RENDERER_URL'])
@@ -46,11 +67,11 @@ async function openPathToWindow(path: string): Promise<void> {
   const win = mainWindow
   if (!win) return
   const result = await openPath(path)
-  const send = (): void => win.webContents.send('shell-open', result)
+  const send = (): void => win.webContents.send(PUSH.shellOpen, result)
   if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send)
   else send()
   if (win.isMinimized()) win.restore()
-  win.focus()
+  if (!E2E_HIDE_WINDOW) win.focus()
 }
 
 function toMeta(e: ThumbEntry) {
@@ -63,25 +84,25 @@ function toMeta(e: ThumbEntry) {
     format: e.payload.kind,
     width: e.width,
     height: e.height,
-    size: e.size
+    size: e.size,
+    hasAlpha: e.payload.kind === 'rgba' && e.payload.hasAlpha
   }
 }
 
-async function openPath(path: string) {
+async function openPath(path: string, format?: string) {
   const resolved = await resolveDbPath(path)
   if ('error' in resolved) return { ...resolved, path }
   path = resolved.path
-  let buf: Buffer
-  try {
-    buf = await readFile(path)
-  } catch (err) {
-    return { error: `Could not read file: ${(err as Error).message}`, path }
-  }
+  // openThumbnailDb handles container detection (SQLite header-routed by path; OLE2 read + sync core).
   let parsed
   try {
-    parsed = parseThumbsDb(buf)
+    parsed = await openThumbnailDb(path, format ? { format } : undefined)
   } catch (err) {
-    return { error: (err as Error).message, path }
+    // File-IO failures (locked, permission denied, vanished) carry an errno code - wrap them so the user
+    // sees a clear "Could not read file" instead of raw OS text. Parse errors (e.g. NotCfbError) have no
+    // code and keep their own message.
+    const e = err as NodeJS.ErrnoException
+    return { error: e.code ? `Could not read file: ${e.message}` : e.message, path }
   }
   current = { path, entries: new Map(parsed.entries.map((e) => [e.streamName, e])) }
 
@@ -107,6 +128,7 @@ async function openPath(path: string) {
     failed: parsed.failed,
     catalogCount: parsed.catalogCount,
     recovered: parsed.recovered,
+    format: parsed.format, // container slug (cfb / irfanview-* / sqlite-photothumb / recovered)
     entries: parsed.entries.map((e) => ({ ...toMeta(e), orphan: isOrphan(e) }))
   }
 }
@@ -123,27 +145,11 @@ async function openViaDialog() {
   return openPath(r.filePaths[0])
 }
 
-ipcMain.handle('open-file', openViaDialog)
+ipcMain.handle(CHANNELS.openFile, openViaDialog)
 
-ipcMain.handle('open-path', (_e, path: string) => openPath(path))
+ipcMain.handle(CHANNELS.openPath, (_e, path: string, format?: string) => openPath(path, format))
 
-ipcMain.handle('get-image', (_e, streamName: string) => {
-  const entry = current?.entries.get(streamName)
-  if (!entry) return null
-  const img = payloadToImage(entry.payload)
-  return { mime: img.mime, bytes: img.data } // Buffer -> Uint8Array over IPC
-})
-
-interface ExportOpts {
-  streamNames: string[] | null // null = all entries
-  mode: SizeMode
-  quality: number
-  includeCsv: boolean
-  skipExisting: boolean
-  toSourceFolder: boolean
-}
-
-ipcMain.handle('export-thumbs', async (e, opts: ExportOpts) => {
+ipcMain.handle(CHANNELS.exportThumbs, async (e, opts: ExportOpts) => {
   if (!current) return { error: 'No file open' }
   let outDir: string
   if (opts.toSourceFolder) {
@@ -170,25 +176,34 @@ ipcMain.handle('export-thumbs', async (e, opts: ExportOpts) => {
       skipExisting: opts.skipExisting,
       includeCsv: opts.includeCsv
     },
-    (done, total) => e.sender.send('export-progress', { done, total })
+    (done, total) => e.sender.send(PUSH.exportProgress, { done, total })
   )
   return summary
 })
 
-ipcMain.handle('open-folder', (_e, path: string) => shell.openPath(path))
+ipcMain.handle(CHANNELS.openFolder, (_e, path: string) => shell.openPath(path))
 
-ipcMain.handle('copy-text', (_e, text: string) => clipboard.writeText(text))
+// External links from the Help menu. Renderer supplies the URL; only open web schemes so a stray
+// file:/javascript: URL can't be launched (guard is a pure, unit-tested fn).
+ipcMain.handle(CHANNELS.openExternal, (_e, url: string) => {
+  // Return the promise so ipcRenderer.invoke awaits it and surfaces failures instead of swallowing them.
+  if (isAllowedExternalUrl(url)) return shell.openExternal(url)
+})
+
+ipcMain.handle(CHANNELS.getAppVersion, () => app.getVersion())
+
+ipcMain.handle(CHANNELS.copyText, (_e, text: string) => clipboard.writeText(text))
 
 // Theme: renderer owns the choice (persisted in localStorage); main holds the OS source of truth.
 // 'system' lets nativeTheme follow the OS and fire 'updated' on OS changes (the auto-detect piece).
-ipcMain.handle('set-theme', (_e, source: 'system' | 'light' | 'dark') => {
+ipcMain.handle(CHANNELS.setTheme, (_e, source: ThemeChoice) => {
   nativeTheme.themeSource = source
   return nativeTheme.shouldUseDarkColors
 })
-ipcMain.handle('get-theme', () => nativeTheme.shouldUseDarkColors)
+ipcMain.handle(CHANNELS.getTheme, () => nativeTheme.shouldUseDarkColors)
 
 // Window/View actions driven by the custom in-renderer menubar (the native menu is disabled).
-ipcMain.handle('window-action', (e, action: string) => {
+ipcMain.handle(CHANNELS.windowAction, (e, action: string) => {
   const win = BrowserWindow.fromWebContents(e.sender)
   if (!win) return
   const wc = win.webContents
@@ -221,10 +236,26 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     Menu.setApplicationMenu(null) // custom in-renderer menubar replaces the native menu
+    // Serve thumbnail bytes for `thumb://img/<version>/<streamName>`. version is the cache-bust
+    // segment (open generation); lookup is by streamName in the current file. Miss or decode
+    // failure -> 404 so the <img> shows its broken/error state (never a perpetual skeleton).
+    protocol.handle('thumb', async (req) => {
+      const name = parseThumbUrl(req.url)
+      const entry = name ? current?.entries.get(name) : undefined
+      if (!entry) return new Response(null, { status: 404 })
+      try {
+        const img = await decode(entry.payload) // total over all payload kinds; abbrev rendered to PNG
+        return new Response(img.bytes, {
+          headers: { 'content-type': img.mime, 'cache-control': 'max-age=31536000, immutable' }
+        })
+      } catch {
+        return new Response(null, { status: 404 }) // abbrev subsampled/non-baseline decode throws
+      }
+    })
     createWindow()
     // OS theme change while running (only fires when themeSource = 'system'): push to renderer for live flip.
     nativeTheme.on('updated', () =>
-      mainWindow?.webContents.send('theme-updated', nativeTheme.shouldUseDarkColors)
+      mainWindow?.webContents.send(PUSH.themeUpdated, nativeTheme.shouldUseDarkColors)
     )
     // Launched with a file/folder path (file association or context menu)? Open it directly.
     const launchPath = firstPathArg(process.argv.slice(1))

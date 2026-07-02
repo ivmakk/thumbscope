@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { Maximize2, RotateCcw, RotateCw, ZoomIn, ZoomOut } from 'lucide-react'
 import type { ThumbMeta } from '../../../preload'
-import { Button } from '@/components/ui/button'
-import { getThumbUrl } from '@/lib/imageCache'
+import { PreviewToolbar } from './PreviewToolbar'
+import { thumbUrl } from '@/lib/imageCache'
+import { needsCheckerboard, CHECKERBOARD_STYLE } from '@/lib/transparency'
 
 // Remembered zoom mode, persisted across app runs. Manual zoom (wheel/buttons) is transient and
 // doesn't change the remembered mode — switching images returns to the last Fit/1:1 choice.
@@ -10,7 +10,6 @@ const MODE_KEY = 'previewMode'
 const getMode = (): 'fit' | 'one' => (localStorage.getItem(MODE_KEY) === 'one' ? 'one' : 'fit')
 
 export function Preview({ entry, version }: { entry: ThumbMeta | null; version: number }): React.JSX.Element {
-  const [url, setUrl] = useState<string | null>(null)
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [fit, setFit] = useState(() => getMode() === 'fit')
@@ -55,19 +54,17 @@ export function Preview({ entry, version }: { entry: ThumbMeta | null; version: 
 
   useEffect(() => {
     setPan({ x: 0, y: 0 })
-    setUrl(null)
     if (!entry) return
     // Reapply the remembered mode for the new image (1:1 is recomputed per image's dims).
     if (modeRef.current === 'one' && entry.width && entry.height) applyOne()
     else applyFit()
-    let alive = true
-    getThumbUrl(entry.streamName).then((u) => alive && setUrl(u))
-    return () => {
-      alive = false
-    }
     // applyOne/applyFit only read entry, which is the dep; intentionally omitted to avoid re-running.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry])
+
+  // Sync `thumb://` URL - Chromium's loader fetches/caches it. version busts the URL when a new
+  // file reuses stream names.
+  const url = entry ? thumbUrl(entry.streamName, version) : null
 
   const setManualZoom = (next: number): void => {
     setFit(false)
@@ -119,8 +116,12 @@ export function Preview({ entry, version }: { entry: ThumbMeta | null; version: 
         }}
         onPointerUp={() => (drag.current = null)}
       >
+        {url && needsCheckerboard(entry) && (
+          <div data-testid="preview-checkerboard" aria-hidden className="absolute inset-0" style={CHECKERBOARD_STYLE} />
+        )}
         {url && (
           <img
+            data-testid="preview-image"
             src={url}
             alt={entry.label}
             draggable={false}
@@ -133,27 +134,15 @@ export function Preview({ entry, version }: { entry: ThumbMeta | null; version: 
           />
         )}
       </div>
-      <div className="flex items-center gap-1.5 border-t border-border px-3 py-1">
-        <Button size="sm" variant="outline" className="h-6 px-2" title="Zoom out" onClick={() => setManualZoom(zoom / 1.25)}>
-          <ZoomOut className="h-4 w-4" />
-        </Button>
-        <Button size="sm" variant="outline" className="h-6 px-2" title="Zoom in" onClick={() => setManualZoom(zoom * 1.25)}>
-          <ZoomIn className="h-4 w-4" />
-        </Button>
-        <Button size="sm" variant={fit ? 'default' : 'outline'} className="h-6 px-2" title="Fit to window" onClick={doFit}>
-          <Maximize2 className="h-4 w-4" />
-        </Button>
-        <Button size="sm" variant={one ? 'default' : 'outline'} className="h-6 px-2" title="Actual size (1:1)" onClick={oneToOne}>
-          1:1
-        </Button>
-        <div className="mx-1 h-4 w-px bg-border" />
-        <Button size="sm" variant="outline" className="h-6 px-2" title="Rotate left" onClick={() => rotate(-90)}>
-          <RotateCcw className="h-4 w-4" />
-        </Button>
-        <Button size="sm" variant="outline" className="h-6 px-2" title="Rotate right" onClick={() => rotate(90)}>
-          <RotateCw className="h-4 w-4" />
-        </Button>
-      </div>
+      <PreviewToolbar
+        fit={fit}
+        one={one}
+        onZoomOut={() => setManualZoom(zoom / 1.25)}
+        onZoomIn={() => setManualZoom(zoom * 1.25)}
+        onFit={doFit}
+        onOne={oneToOne}
+        onRotate={rotate}
+      />
       <div className="truncate border-t border-border px-3 py-1.5 text-xs text-muted-foreground" title={entry.label}>
         {entry.label} · {entry.width && entry.height ? `${entry.width}×${entry.height}` : '—'} · {naturalPct() ?? Math.round(zoom * 100)}%
       </div>

@@ -42,6 +42,7 @@ Cross-platform desktop viewer (Electron + React + TypeScript) to open proprietar
 | `Thumbs.db` (Windows Vista / 7) | JPEG | Newer per-folder cache; thumbnails only, no filenames. - OLE2/CFB, no catalog; per-size streams (`<size>_<hash>`), JPEG behind a Microsoft thumbstream header; hash labels. |
 | `ehthumbs.db` | BMP / DIB | Windows Media Center cache, with filenames and dates. - OLE2/CFB, 8-byte catalog header; 24/32bpp DIB payloads. |
 | `ivThumbs.db` (IrfanView) | BMP | IrfanView's thumbnail database, with real filenames and dates. - OLE2/CFB marked by a `_Thumbs_DB_Ver` stream, no catalog; filename-named streams of FILETIME-prefixed BMP; flat and nested layouts. |
+| `photothumb.db` (PhotoScape) | JPEG | PhotoScape's thumbnail cache, with real filenames and dates. - SQLite 3 database (not OLE2), a single `thumb` table of JFIF JPEG blobs. |
 
 More formats are on the roadmap - [suggest one](https://github.com/ivmakk/thumbscope/issues/new) with the format name and its source app.
 
@@ -117,12 +118,19 @@ npm run cli -- list sample/Thumbs.db
 
 ### 3.5. Testing
 
+Three tiers, picked by file extension: `node --test` for pure logic (`*.test.ts`), Vitest for component render (`*.test.tsx`), and Playwright `_electron` for the real app end-to-end (`e2e/specs/*.spec.ts`, Windows + macOS).
+
 ```sh
 npm test                            # node --test over src/**/*.test.ts
 node --test src/core/parser.test.ts # single file
+npm run test:renderer               # vitest component tier (.test.tsx)
+npm run test:e2e                    # Playwright _electron (builds first, then runs e2e/specs)
+npm run test:all                    # node --test then vitest
 ```
 
-Node 24 strips TypeScript types natively, so the `.ts` test files run directly with no build step.
+Node 24 strips TypeScript types natively, so the `.ts` test files run directly with no build step. The E2E tier needs no `npx playwright install` - `_electron` drives the Chromium bundled in the `electron` dependency, so Playwright's own browser binaries are never used (CI skips downloading them with `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`).
+
+See [`docs/testing.md`](docs/testing.md) for what each tier covers, how to run E2E locally with the GUI and traces, and how to add a format case or a new spec.
 
 ### 3.6. Type-checking
 
@@ -130,14 +138,14 @@ Node 24 strips TypeScript types natively, so the `.ts` test files run directly w
 npm run typecheck
 ```
 
-Runs `tsc --noEmit` for both the node and web projects. `npm run build` does **not** type-check - run this separately.
+Runs `tsgo --noEmit` (the TypeScript 7 native compiler, `@typescript/native-preview`) for both the node and web projects. `npm run build` does **not** type-check - run this separately.
 
 ### 3.7. Building & packaging
 
 ```sh
 npm run build       # production build into out/ (no type-check)
 npm run dist:win    # full Windows NSIS installer (build + bundled CLI) -> release/
-npm run dist:mac    # macOS arm64 .dmg + .zip (build + bundled CLI) -> release/
+npm run dist:mac    # macOS arm64 .dmg (build + bundled CLI) -> release/
 npm run pack:dir    # unpacked build, no installer, for quick inspection
 npm run build:icons # regenerate the icon set from build/icon.svg (only when art changes)
 ```

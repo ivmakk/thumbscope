@@ -1,12 +1,13 @@
 // Electron-free export engine: payload -> JPEG (sharp) + the per-entry write loop.
 // Shared by the GUI main process and the CLI so both produce byte-identical output.
-// sharp is Node-only (not Electron-only) so it lives here; parser.ts/image.ts stay sharp-free.
+// sharp is Node-only (not Electron-only) so it lives here; the core parser stays sharp-free.
 
 import { join } from 'node:path'
 import { writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import sharp from 'sharp'
 import { targetDimensions, exportFilename, toCsv, type SizeMode, type CsvRow } from './export.ts'
+import { decodeAbbrevRgb } from './formats/codec/abbrevJpeg.ts'
 import type { Payload, ThumbEntry } from './types.ts'
 
 // Encode one parsed payload to JPEG honoring the size mode.
@@ -27,6 +28,33 @@ export async function encodeJpeg(
       .jpeg({ quality })
       .toBuffer()
   }
+  if (payload.kind === 'png') {
+    // Export always emits JPEG, so a PNG payload always re-encodes (no byte passthrough).
+    const img = sharp(payload.data)
+    const target = width && height ? targetDimensions(width, height, mode) : null
+    if (target) img.resize(target.width, target.height, { kernel: 'lanczos3' }).sharpen()
+    return img.jpeg({ quality }).toBuffer()
+  }
+  if (payload.kind === 'abbrev-jpeg') {
+    // Reconstructed abbrev-jpeg JPEG: our decoder yields upright packed RGB (reversed-channel copy, no
+    // complement, K ignored, already flipped), so sharp just ingests raw RGB — no CMYK profile, no flip.
+    const rgb = decodeAbbrevRgb(payload.data)
+    const img = sharp(rgb.pixels, { raw: { width: rgb.width, height: rgb.height, channels: 3 } })
+    const target = targetDimensions(rgb.width, rgb.height, mode)
+    if (target) img.resize(target.width, target.height, { kernel: 'lanczos3' }).sharpen()
+    return img.jpeg({ quality }).toBuffer()
+  }
+  if (payload.kind === 'rgba') {
+    // Straight RGBA (4 channels). JPEG has no alpha, so flatten onto white before encoding - otherwise
+    // sharp would be handed a w*h*4 buffer while told channels:3 and throw a size-mismatch.
+    const img = sharp(payload.pixels, {
+      raw: { width: payload.width, height: payload.height, channels: 4 }
+    }).flatten({ background: '#ffffff' })
+    const target = targetDimensions(payload.width, payload.height, mode)
+    if (target) img.resize(target.width, target.height, { kernel: 'lanczos3' }).sharpen()
+    return img.jpeg({ quality }).toBuffer()
+  }
+  // dib: opaque packed RGB (3 channels).
   const img = sharp(payload.pixels, {
     raw: { width: payload.width, height: payload.height, channels: 3 }
   })

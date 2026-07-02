@@ -16,12 +16,16 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Slider } from '@/components/ui/slider'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable'
+import { resolveDisplayIndex } from '@/lib/tableIndex'
 import { BrowseGrid } from '@/components/BrowseGrid'
 import { BrowseTable } from '@/components/BrowseTable'
 import { Preview } from '@/components/Preview'
 import { ExportDialog } from '@/components/ExportDialog'
 import { MenuBar } from '@/components/MenuBar'
-import { resetImageCache } from '@/lib/imageCache'
+import { friendlyError } from '@/lib/errors'
+import { previewMinPctFor } from '@/lib/layout'
+import { parseThumbSize, DEFAULT_THUMB, THUMB_MIN, THUMB_MAX } from '@/lib/thumbSize'
+import { keyToAction, isTypingTarget } from '@/lib/keys'
 import { applyDark, getStoredChoice, storeChoice } from '@/lib/theme'
 import type { ThemeChoice } from '../../preload'
 
@@ -33,18 +37,9 @@ const SORT_FIELDS: { key: SortKey; label: string }[] = [
   { key: 'size', label: 'Size' },
   { key: 'date', label: 'Date' }
 ]
-const DEFAULT_THUMB = 150
 const THUMB_KEY = 'grid.thumbSize' // remembered across sessions
 function initThumbSize(): number {
-  const v = Number(localStorage.getItem(THUMB_KEY))
-  return Number.isFinite(v) && v >= 90 && v <= 300 ? v : DEFAULT_THUMB
-}
-
-// Map main's raw error text to a short, end-user message.
-function friendlyError(raw: string): string {
-  if (/folder/i.test(raw)) return 'No Thumbs.db or ehthumbs.db found in that folder.'
-  if (/could not (read|open)/i.test(raw)) return "Couldn't open that file."
-  return 'Unsupported file — not a Thumbs.db or ehthumbs.db.'
+  return parseThumbSize(localStorage.getItem(THUMB_KEY))
 }
 
 const SORT_OPTIONS = SORT_FIELDS.flatMap((f) => [
@@ -67,6 +62,20 @@ function App(): React.JSX.Element {
   const [dragging, setDragging] = useState(false)
   const [orphanFilter, setOrphanFilter] = useState(false) // show only recoverable (orphan) thumbs
   const [theme, setThemeState] = useState<ThemeChoice>(getStoredChoice)
+  const [appVersion, setAppVersion] = useState('')
+  // Store the coarse percent (not raw width) so setting it to the same value on most
+  // resize ticks bails the re-render — only a boundary crossing re-renders App.
+  const [previewMinPct, setPreviewMinPct] = useState(() => previewMinPctFor(window.innerWidth))
+  useEffect(() => {
+    const onResize = (): void => setPreviewMinPct(previewMinPctFor(window.innerWidth))
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  // Installed app version for the Help menu (from main's app.getVersion()); fetched once.
+  useEffect(() => {
+    window.api.getAppVersion().then(setAppVersion, () => {})
+  }, [])
 
   // Remember the grid thumbnail size across sessions.
   useEffect(() => {
@@ -92,11 +101,13 @@ function App(): React.JSX.Element {
     setThemeState(choice)
   }, [])
 
+  // Resolve the `#` once per file (not per sort/filter toggle): index-less variants get a stable
+  // 1-based stamp of their position in the parser's entry order, before the filter/sort reorder them.
+  const resolved = useMemo(() => (result ? resolveDisplayIndex(result.entries) : []), [result])
   const entries = useMemo(() => {
-    if (!result) return []
-    const base = orphanFilter ? result.entries.filter((e) => e.orphan) : result.entries
+    const base = orphanFilter ? resolved.filter((e) => e.orphan) : resolved
     return sortEntries(base, sortKey, sortDir)
-  }, [result, sortKey, sortDir, orphanFilter])
+  }, [resolved, sortKey, sortDir, orphanFilter])
   const orderedIds = useMemo(() => entries.map((e) => e.streamName), [entries])
   const previewPos = previewId ? orderedIds.indexOf(previewId) + 1 : 0 // 1-based; 0 = none
   const orphanCount = result ? result.entries.filter((e) => e.orphan).length : 0
@@ -115,7 +126,6 @@ function App(): React.JSX.Element {
       setError({ msg: friendlyError(r.error), path: r.path, raw: r.error })
       return
     }
-    resetImageCache()
     setError(null)
     setResult(r)
     setOrphanFilter(false)
@@ -165,23 +175,18 @@ function App(): React.JSX.Element {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       // Don't hijack Ctrl+A (or others) while typing in a field — e.g. the export dialog.
-      const t = e.target as HTMLElement | null
-      const typing =
-        !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
-      if (e.ctrlKey && e.key.toLowerCase() === 'o') {
-        e.preventDefault()
-        doOpen()
-      } else if (e.ctrlKey && e.key.toLowerCase() === 'e') {
-        e.preventDefault()
-        doExport()
-      } else if (e.ctrlKey && e.key.toLowerCase() === 'a' && !typing) {
-        e.preventDefault() // else the browser selects the whole UI's DOM text
-        doSelectAll()
-      } else if (e.key === 'F12') {
-        window.api.windowAction('toggle-devtools')
-      } else if (e.key === 'F11') {
-        e.preventDefault()
-        window.api.windowAction('toggle-fullscreen')
+      const hit = keyToAction({ ctrlKey: e.ctrlKey, key: e.key, typing: isTypingTarget(e.target) })
+      if (!hit) return
+      if (hit.preventDefault) e.preventDefault()
+      switch (hit.action) {
+        case 'open': doOpen(); break
+        case 'export': doExport(); break
+        case 'select-all': doSelectAll(); break
+        case 'toggle-devtools': window.api.windowAction('toggle-devtools'); break
+        case 'toggle-fullscreen': window.api.windowAction('toggle-fullscreen'); break
+        case 'zoom-in': window.api.windowAction('zoom-in'); break
+        case 'zoom-out': window.api.windowAction('zoom-out'); break
+        case 'zoom-reset': window.api.windowAction('zoom-reset'); break
       }
     }
     window.addEventListener('keydown', onKey)
@@ -230,6 +235,8 @@ function App(): React.JSX.Element {
         filePath={result?.path ?? null}
         theme={theme}
         onThemeChange={setTheme}
+        appVersion={appVersion}
+        modalOpen={exportOpen}
       />
       <header className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-1.5">
         <Button size="sm" className="h-7" onClick={doOpen} disabled={loading}>
@@ -265,7 +272,7 @@ function App(): React.JSX.Element {
             </SelectTrigger>
             <SelectContent>
               {SORT_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value}>
+                <SelectItem key={o.value} value={o.value} data-testid={`sort-${o.value}`}>
                   <span className="flex items-center gap-2">
                     <span className="w-12">{o.label}</span>
                     {o.dir === 'asc' ? (
@@ -319,7 +326,10 @@ function App(): React.JSX.Element {
       ) : (
         <>
         {result.recovered && (
-          <div className="flex items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-300">
+          <div
+            data-testid="recovery-banner"
+            className="flex items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-300"
+          >
             <TriangleAlert className="h-3.5 w-3.5 shrink-0" />
             <span>
               <span className="font-medium">
@@ -344,6 +354,7 @@ function App(): React.JSX.Element {
                     entries={entries}
                     selected={selection.selected}
                     previewId={previewId}
+                    version={openId}
                     onClick={onEntryClick}
                     sortKey={sortKey}
                     sortDir={sortDir}
@@ -353,7 +364,7 @@ function App(): React.JSX.Element {
               </div>
               <div className="flex items-center gap-3 border-t border-border px-3 py-1.5 text-xs text-muted-foreground">
                 <span className="truncate" title={result.path}>
-                  {previewPos > 0 ? `${previewPos} / ${result.count}` : `${result.count}`} thumbs · {result.failed} failed · {selection.selected.size} selected
+                  {previewPos > 0 ? `${previewPos} / ${result.count}` : `${result.count}`} thumbs · {result.failed} failed · {selection.selected.size} selected · {result.format}
                   {orphanCount > 0 && (
                     <>
                       {' · '}
@@ -378,8 +389,8 @@ function App(): React.JSX.Element {
                       ×{Number.isInteger(thumbSize / DEFAULT_THUMB) ? thumbSize / DEFAULT_THUMB : (thumbSize / DEFAULT_THUMB).toFixed(1)}
                     </button>
                     <Slider
-                      min={90}
-                      max={300}
+                      min={THUMB_MIN}
+                      max={THUMB_MAX}
                       step={10}
                       value={[thumbSize]}
                       onValueChange={(v) => setThumbSize(v[0])}
@@ -392,7 +403,7 @@ function App(): React.JSX.Element {
             </div>
           </ResizablePanel>
           <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={38} minSize={20}>
+          <ResizablePanel defaultSize={38} minSize={previewMinPct}>
             <Preview entry={previewEntry} version={openId} />
           </ResizablePanel>
         </ResizablePanelGroup>

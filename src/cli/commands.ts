@@ -2,12 +2,12 @@
 // Each command returns a process exit code; never throws on bad/corrupt input.
 
 import { dirname } from 'node:path'
-import { readFile, mkdir, writeFile } from 'node:fs/promises'
-import { parseThumbsDb } from '../core/parser.ts'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { openThumbnailDb } from '../core/formats/open.ts'
 import { resolveDbPath } from '../core/shell.ts'
 import { exportEntries } from '../core/encode.ts'
 import { toCsv, type SizeMode, type CsvRow } from '../core/export.ts'
-import { sortEntries } from '../core/view.ts'
+import { sortEntries, formatDateTime } from '../core/view.ts'
 import type { ThumbEntry } from '../core/types.ts'
 
 export interface ExportArgs {
@@ -17,27 +17,30 @@ export interface ExportArgs {
   filter?: string
   csv: boolean
   overwrite: boolean
+  format?: string // force a container handler by slug (manual override)
 }
 
 export interface ListArgs {
   csv?: string // output file path; omit = print to stdout
+  format?: string // force a container handler by slug (manual override)
 }
 
 // Read a db path (file or folder) and parse it. Returns entries or an error message.
-async function load(db: string): Promise<{ path: string; entries: ThumbEntry[] } | { error: string }> {
+// `format` forces a container handler by slug (manual override), passed straight to openThumbnailDb.
+async function load(
+  db: string,
+  format?: string
+): Promise<{ path: string; entries: ThumbEntry[] } | { error: string }> {
   const resolved = await resolveDbPath(db)
   if ('error' in resolved) return resolved
-  let buf: Buffer
   try {
-    buf = await readFile(resolved.path)
-  } catch (err) {
-    return { error: `Could not read file: ${(err as Error).message}` }
-  }
-  try {
-    const parsed = parseThumbsDb(buf)
+    // openThumbnailDb handles container detection (SQLite header-routed by path; OLE2 read + sync core).
+    const parsed = await openThumbnailDb(resolved.path, format ? { format } : undefined)
     return { path: resolved.path, entries: sortByIndex(parsed.entries) }
   } catch (err) {
-    return { error: (err as Error).message }
+    // IO errors carry an errno code -> friendly "Could not read file"; parse errors keep their message.
+    const e = err as NodeJS.ErrnoException
+    return { error: e.code ? `Could not read file: ${e.message}` : e.message }
   }
 }
 
@@ -73,7 +76,7 @@ export async function cmdExport(db: string, args: ExportArgs): Promise<number> {
     return 2
   }
 
-  const loaded = await load(db)
+  const loaded = await load(db, args.format)
   if ('error' in loaded) {
     process.stderr.write(loaded.error + '\n')
     return 1
@@ -109,7 +112,7 @@ export async function cmdExport(db: string, args: ExportArgs): Promise<number> {
 }
 
 export async function cmdList(db: string, args: ListArgs): Promise<number> {
-  const loaded = await load(db)
+  const loaded = await load(db, args.format)
   if ('error' in loaded) {
     process.stderr.write(loaded.error + '\n')
     return 1
@@ -138,13 +141,11 @@ export async function cmdList(db: string, args: ListArgs): Promise<number> {
   // Aligned table: header + one row per thumbnail, columns padded to their widest value.
   // Column order mirrors the UI table (#, Name, Size, Date, Dims).
   const header = ['#', 'NAME', 'SIZE', 'DATE', 'DIMS']
-  // "2010-07-02T14:03:20.000Z" -> "2010-07-02 14:03:20" (drop T / Z / milliseconds).
-  const fmtDate = (iso: string | null): string => (iso ? iso.slice(0, 19).replace('T', ' ') : '-')
   const table = rows.map((r) => [
     String(r.id),
     r.filename,
     String(r.size),
-    fmtDate(r.date),
+    formatDateTime(r.date, '-'),
     r.width && r.height ? `${r.width}x${r.height}` : '-'
   ])
   const widths = header.map((h) => h.length)

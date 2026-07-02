@@ -234,6 +234,14 @@ CLAUDE.local.md
 dist/
 release/
 
+# Playwright E2E (T3) output
+playwright-report/
+test-results/
+
+# graphify knowledge-graph output + config (machine-generated, local tooling)
+graphify-out/
+.graphifyignore
+
 # Test fixtures: Windows template ignores Thumbs.db/ehthumbs.db above.
 # Committed synthetic, SFW sample for manual GUI testing (must be un-ignored):
 !sample/Thumbs.db
@@ -245,6 +253,8 @@ tests/fixtures/real/
 docs/local/
 # Personal doc layer (real paths, machine-specific notes).
 *.local.md
+# Local-only /code-review instructions (personal review style; don't force on others).
+/REVIEW.md
 # Raw third-party / device thumbnail caches, in case any are copied outside tests/fixtures/real/.
 *.ptc
 *.lrprev

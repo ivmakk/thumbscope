@@ -20,7 +20,7 @@ export const MenubarTrigger = React.forwardRef<
   <MenubarPrimitive.Trigger
     ref={ref}
     className={cn(
-      'select-none rounded-sm px-2 py-1 text-sm outline-none focus:bg-accent data-[state=open]:bg-accent',
+      'select-none rounded-sm px-2 py-1 text-sm outline-none hover:bg-accent focus:bg-accent data-[state=open]:bg-accent',
       className
     )}
     {...props}
