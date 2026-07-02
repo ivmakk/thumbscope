@@ -62,6 +62,7 @@ function App(): React.JSX.Element {
   const [dragging, setDragging] = useState(false)
   const [orphanFilter, setOrphanFilter] = useState(false) // show only recoverable (orphan) thumbs
   const [theme, setThemeState] = useState<ThemeChoice>(getStoredChoice)
+  const [appVersion, setAppVersion] = useState('')
   // Store the coarse percent (not raw width) so setting it to the same value on most
   // resize ticks bails the re-render — only a boundary crossing re-renders App.
   const [previewMinPct, setPreviewMinPct] = useState(() => previewMinPctFor(window.innerWidth))
@@ -69,6 +70,11 @@ function App(): React.JSX.Element {
     const onResize = (): void => setPreviewMinPct(previewMinPctFor(window.innerWidth))
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  // Installed app version for the Help menu (from main's app.getVersion()); fetched once.
+  useEffect(() => {
+    window.api.getAppVersion().then(setAppVersion)
   }, [])
 
   // Remember the grid thumbnail size across sessions.
@@ -181,6 +187,9 @@ function App(): React.JSX.Element {
         case 'select-all': doSelectAll(); break
         case 'toggle-devtools': window.api.windowAction('toggle-devtools'); break
         case 'toggle-fullscreen': window.api.windowAction('toggle-fullscreen'); break
+        case 'zoom-in': window.api.windowAction('zoom-in'); break
+        case 'zoom-out': window.api.windowAction('zoom-out'); break
+        case 'zoom-reset': window.api.windowAction('zoom-reset'); break
       }
     }
     window.addEventListener('keydown', onKey)
@@ -229,6 +238,8 @@ function App(): React.JSX.Element {
         filePath={result?.path ?? null}
         theme={theme}
         onThemeChange={setTheme}
+        appVersion={appVersion}
+        modalOpen={exportOpen}
       />
       <header className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-1.5">
         <Button size="sm" className="h-7" onClick={doOpen} disabled={loading}>

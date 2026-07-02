@@ -8,6 +8,7 @@ import { firstPathArg, resolveDbPath } from '../core/shell.ts'
 import type { ThumbEntry } from '../core/types.ts'
 import { CHANNELS, PUSH } from '../shared/ipc.ts'
 import type { ExportOpts, ThemeChoice } from '../shared/ipc.ts'
+import { isAllowedExternalUrl } from '../shared/externalUrl.ts'
 import { parseThumbUrl } from '../shared/thumbUrl.ts'
 
 // `thumb://` custom protocol: thumbnail transport. Renderer <img src> points here; Chromium's
@@ -181,6 +182,14 @@ ipcMain.handle(CHANNELS.exportThumbs, async (e, opts: ExportOpts) => {
 })
 
 ipcMain.handle(CHANNELS.openFolder, (_e, path: string) => shell.openPath(path))
+
+// External links from the Help menu. Renderer supplies the URL; only open web schemes so a stray
+// file:/javascript: URL can't be launched (guard is a pure, unit-tested fn).
+ipcMain.handle(CHANNELS.openExternal, (_e, url: string) => {
+  if (isAllowedExternalUrl(url)) shell.openExternal(url)
+})
+
+ipcMain.handle(CHANNELS.getAppVersion, () => app.getVersion())
 
 ipcMain.handle(CHANNELS.copyText, (_e, text: string) => clipboard.writeText(text))
 

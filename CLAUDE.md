@@ -111,6 +111,7 @@ Classic `Thumbs.db` is an **OLE2 / Compound File Binary** container (magic `D0 C
 - Parser must handle **non-ASCII (UTF-16) filenames** (Cyrillic confirmed) and **never crash on truncated/corrupt files** - skip-and-log per entry, report a failed count.
 - `.db` is not unique to Thumbs.db (SQLite etc.), so do **not** force a default file association on `.db`. Context-menu entries only; association is opt-in in the installer.
 - Keep `src/core` free of Electron/DOM imports.
+- **Prefer static top-level imports.** Avoid dynamic `import()` and inline `import('x').Type` until a concrete reason demands it (code-splitting a heavy chunk, breaking a require cycle, deferring a Node-only module) - lazy imports push resolution/type errors to runtime.
 - Do not commit automatically - the user commits manually.
 - **Branches**: `develop` is the integration branch; `main` is the release branch (only updated at release). Cut all feature/fix work off `develop` (not `main`) and target PRs back at `develop`. See `CONTRIBUTING.md`.
 - **Issue linkage**: branch as `feat/<N>-<slug>` (bare number, no `#`) off `develop`. Keep the conventional-commit subject and add `Refs #<N>` in the commit footer + PR body to cross-link without auto-closing. Don't use closing keywords (`Closes/Fixes/Resolves`) - issues are closed manually.

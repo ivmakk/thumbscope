@@ -56,7 +56,13 @@ const api = {
     return () => ipcRenderer.off(PUSH.themeUpdated, listener)
   },
   // Resolve the absolute path of a dropped File (renderer File objects no longer expose .path).
-  pathForFile: (file: File): string => webUtils.getPathForFile(file)
+  pathForFile: (file: File): string => webUtils.getPathForFile(file),
+  // Open an external URL in the default browser (https-guarded main-side). For Help-menu links.
+  openExternal: (url: string): Promise<void> => ipcRenderer.invoke(CHANNELS.openExternal, url),
+  // Installed app version (app.getVersion(), synced from package.json).
+  getAppVersion: (): Promise<string> => ipcRenderer.invoke(CHANNELS.getAppVersion),
+  // Host platform (process.platform) - gates the Alt-mnemonic layer (win32/linux) vs mac focus-entry.
+  platform: process.platform
 }
 
 contextBridge.exposeInMainWorld('api', api)
