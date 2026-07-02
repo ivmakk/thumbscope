@@ -30,7 +30,7 @@ Cross-platform desktop viewer (Electron + React + TypeScript) to open proprietar
 
 - Browse stored images as thumbnails or in a list, with a larger preview of the selected one. Images load lazily, so large databases stay responsive.
 - Export to a folder as JPEG - stored original, or resized/upscaled - with optional CSV metadata.
-- Recovers raw JPEGs from truncated / partly-corrupt containers (carve fallback).
+- Recovers raw JPEGs (or PNGs) from truncated / partly-corrupt containers (carve fallback).
 - Read-only - never modifies the source database.
 - Fully offline and private - works with no network access, no telemetry; your thumbnail data never leaves your machine.
 
@@ -39,7 +39,8 @@ Cross-platform desktop viewer (Electron + React + TypeScript) to open proprietar
 | Format | Stored image | Description |
 |---|---|---|
 | `Thumbs.db` (Windows 2000 / XP) | JPEG | Original Windows folder thumbnail cache, with real filenames and dates. - OLE2/CFB with a `Catalog` stream (16-byte header); names (or GUIDs) + dates from the catalog. |
-| `Thumbs.db` (Windows Vista / 7) | JPEG | Newer per-folder cache; thumbnails only, no filenames. - OLE2/CFB, no catalog; per-size streams (`<size>_<hash>`), JPEG behind a Microsoft thumbstream header; hash labels. |
+| `Thumbs.db` (Windows Vista / 7) | JPEG / PNG | Newer per-folder cache; thumbnails only, no filenames. - OLE2/CFB, no catalog; per-size streams (`<size>_<hash>`), JPEG or PNG behind a Microsoft thumbstream header; hash labels. |
+| `thumbcache_*.db` (Windows Explorer) | JPEG / PNG / BMP | Windows Explorer's central thumbnail cache on Windows Vista, 7, 8, 10, and 11 - files named `thumbcache_16.db`, `thumbcache_32.db`, `thumbcache_96.db`, `thumbcache_256.db`, `thumbcache_768.db`, `thumbcache_1024.db`, `thumbcache_1280.db`, `thumbcache_1920.db`, `thumbcache_2560.db`, and similar; thumbnails only, no filenames. - Flat `CMMM` container (not OLE2), per-version entry layout, hex cache-id labels; JPEG, PNG, or raw BGRA payloads (`thumbcache_idx.db` / `IMMM` index files are recognized and skipped). |
 | `ehthumbs.db` | BMP / DIB | Windows Media Center cache, with filenames and dates. - OLE2/CFB, 8-byte catalog header; 24/32bpp DIB payloads. |
 | `ivThumbs.db` (IrfanView) | BMP | IrfanView's thumbnail database, with real filenames and dates. - OLE2/CFB marked by a `_Thumbs_DB_Ver` stream, no catalog; filename-named streams of FILETIME-prefixed BMP; flat and nested layouts. |
 | `photothumb.db` (PhotoScape) | JPEG | PhotoScape's thumbnail cache, with real filenames and dates. - SQLite 3 database (not OLE2), a single `thumb` table of JFIF JPEG blobs. |
@@ -71,7 +72,13 @@ The build is unsigned, so Windows SmartScreen may show an "unrecognized app" pro
 
 Download `thumbscope-<version>-arm64.dmg`, open it, and drag **Thumbscope** to **Applications**. Apple Silicon (M-series) only; Intel Macs are not supported yet.
 
-The build is unsigned and not notarized, so Gatekeeper blocks it on first launch. Open it once via **right-click (or Control-click) → Open → Open**; subsequent launches work normally. (Alternatively: `xattr -dr com.apple.quarantine /Applications/Thumbscope.app`.)
+The build is unsigned and not notarized, so macOS blocks it on first launch - on recent macOS (Sequoia 15+) it reports the app as *"damaged and can't be opened"*. This is expected for an unsigned app, not a corrupt download. After dragging Thumbscope to **Applications**, clear the download quarantine flag from a terminal:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Thumbscope.app
+```
+
+It then opens normally. Sequoia 15.1+ removed the old right-click → **Open** bypass and shows no **Open Anyway** button for unsigned apps, so the command above is the reliable fix. On older macOS you can instead right-click the app → **Open** → **Open**.
 
 To use the `thumbscope` CLI from a terminal, symlink the bundled launcher onto your `PATH`:
 
@@ -152,15 +159,16 @@ npm run build:icons # regenerate the icon set from build/icon.svg (only when art
 
 ### 3.8. Project structure
 
-- `src/core/` - pure, platform-agnostic logic (parser, image normalization, export pipeline) shared by main and CLI. No Electron or DOM imports.
-- `src/main/` - Electron main process: window, IPC handlers, shell-launch open. `cfb` and `sharp` live here.
-- `src/preload/` - the `contextBridge` API surface (`window.api`); the typed IPC contract.
+- `src/core/` - pure, platform-agnostic logic: format detection/parsing/decoding (`formats/`), the export pipeline, and view helpers, shared by main and CLI. No Electron or DOM imports.
+- `src/main/` - Electron main process: window, IPC handlers, the `thumb://` protocol, shell-launch open. `cfb` and `sharp` live here.
+- `src/preload/` - the `contextBridge` API surface (`window.api`).
+- `src/shared/` - cross-process code with no Electron/DOM imports: the typed IPC contract (`ipc.ts`) and the `thumb://` URL builder.
 - `src/renderer/` - sandboxed React page (menubar, grid, table, preview, export dialog).
 - `src/cli/` - `commander` CLI calling straight into `src/core`.
 
 ## 4. Acknowledgements
 
-Thumbscope was inspired by [**Thumbs Viewer**](https://thumbsviewer.github.io/) by [@erickutcher](https://github.com/erickutcher) - a long-running, open-source native Windows tool for legacy thumbnail databases. If you're on an older Windows version or 32-bit Windows that Thumbscope doesn't target, or need formats it doesn't cover (e.g. `Image.db`, `Video.db`), Thumbs Viewer - and its companion **Thumbcache Viewer** for `thumbcache_*.db` - is a great option.
+Thumbscope was inspired by [**Thumbs Viewer**](https://thumbsviewer.github.io/) by [@erickutcher](https://github.com/erickutcher) - a long-running, open-source native Windows tool for legacy thumbnail databases. If you're on an older Windows version or 32-bit Windows that Thumbscope doesn't target, or need formats it doesn't cover (e.g. `Image.db`, `Video.db`), Thumbs Viewer is a great option. Its companion **Thumbcache Viewer** specializes in `thumbcache_*.db` (which Thumbscope also reads).
 
 ## 5. License
 
