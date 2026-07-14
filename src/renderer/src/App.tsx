@@ -419,7 +419,7 @@ function App(): React.JSX.Element {
       />
 
       {error && (
-        <div className="absolute top-20 left-1/2 z-50 flex max-w-[90%] -translate-x-1/2 items-start gap-2.5 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 shadow-md backdrop-blur-sm dark:text-red-300">
+        <div data-testid="open-error" className="absolute top-20 left-1/2 z-50 flex max-w-[90%] -translate-x-1/2 items-start gap-2.5 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 shadow-md backdrop-blur-sm dark:text-red-300">
           <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
           <div className="min-w-0">
             <div>

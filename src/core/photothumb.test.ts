@@ -4,8 +4,9 @@ import { DatabaseSync } from 'node:sqlite'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { isSqlite, parsePhotothumb } from './photothumb.ts'
+import { isSqlite, parsePhotothumb, UNSUPPORTED_SQLITE_MESSAGE } from './photothumb.ts'
 import { TINY_JPEG } from './fixture.ts'
+import { friendlyError } from '../renderer/src/lib/errors.ts'
 
 // Write a throwaway SQLite db to a temp path and return it. node:sqlite opens a path, not a buffer,
 // so the fixture is a real file the test cleans up. `setup` customizes schema/rows per case.
@@ -64,8 +65,16 @@ test('parses a PhotoScape photothumb.db: names, dims, dates from the table', () 
 test('throws a clear error when the SQLite db has no thumb table', () => {
   withDb(
     (db) => db.exec('CREATE TABLE other(x int)'),
-    (path) => assert.throws(() => parsePhotothumb(path), /thumb/)
+    (path) => assert.throws(() => parsePhotothumb(path), new RegExp(UNSUPPORTED_SQLITE_MESSAGE.slice(0, 20)))
   )
+})
+
+// Contract: the message parsePhotothumb throws must keep mapping to the SQLite headline in the renderer.
+// friendlyError keys off the "SQLite database" substring, so editing UNSUPPORTED_SQLITE_MESSAGE to drop
+// it silently regresses the GUI to the generic fallback — assert the real message end-to-end here, at the
+// fast node --test tier, rather than relying only on the slow e2e spec to catch drift.
+test('the unsupported-SQLite message maps to the SQLite headline, not the generic fallback', () => {
+  assert.strictEqual(friendlyError(UNSUPPORTED_SQLITE_MESSAGE), 'SQLite database - not a thumbnail cache Thumbscope can read.')
 })
 
 test('throws a clear error when the thumb table is missing expected columns', () => {

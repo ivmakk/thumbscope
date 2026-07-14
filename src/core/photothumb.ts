@@ -11,6 +11,12 @@ import { jpegDimensions, sliceJpeg } from './formats/codec/jpeg.ts'
 // "SQLite format 3\0" — the fixed 16-byte header every SQLite 3 file starts with.
 const SQLITE_MAGIC = Buffer.from('53514c69746520666f726d6174203300', 'hex')
 
+// Thrown when the file is a valid SQLite database but not a supported thumbnail cache. The renderer's
+// friendlyError() keys its headline off the "SQLite database" substring here — keep them in sync (a
+// node --test asserts that contract so drift can't slip past the fast tier).
+export const UNSUPPORTED_SQLITE_MESSAGE =
+  'This is a SQLite database, not a thumbnail cache Thumbscope can read (only PhotoScape photothumb.db caches are supported).'
+
 export function isSqlite(buf: Buffer): boolean {
   return buf.length >= 16 && buf.subarray(0, 16).equals(SQLITE_MAGIC)
 }
@@ -43,7 +49,7 @@ export function parsePhotothumb(path: string): ParseResult {
     } catch (err) {
       const msg = (err as Error).message || ''
       if (/no such (table|column)/i.test(msg)) {
-        throw new Error('Unrecognized SQLite database: expected a PhotoScape photothumb.db with a "thumb" table (fname, tmodify, image columns).')
+        throw new Error(UNSUPPORTED_SQLITE_MESSAGE)
       }
       throw err
     }

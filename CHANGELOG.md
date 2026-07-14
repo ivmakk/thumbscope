@@ -4,6 +4,10 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ## [Unreleased]
 
+### Changed
+
+- Opening a valid SQLite database that isn't a supported thumbnail cache now shows a clear "SQLite database, not a thumbnail cache" message instead of the generic "unsupported file" one.
+
 ## [1.2.0] - 2026-07-02
 
 ### Added

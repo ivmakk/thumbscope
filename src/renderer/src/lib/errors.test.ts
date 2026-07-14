@@ -28,6 +28,15 @@ test('friendlyError: thumbcache index -> surfaces the no-images message (not the
   )
 })
 
+test('friendlyError: raw text naming a SQLite database -> SQLite headline (not the generic fallback)', () => {
+  // Rule under test: any raw error mentioning a "SQLite database" maps to the SQLite headline. The exact
+  // production string and its round-trip live in photothumb.test.ts (the real UNSUPPORTED_SQLITE_MESSAGE).
+  assert.strictEqual(
+    friendlyError('some SQLite database that is not a thumbnail cache'),
+    'SQLite database - not a thumbnail cache Thumbscope can read.'
+  )
+})
+
 test('friendlyError: folder match wins over read/open when both present', () => {
   // folder is checked first in the original; lock that ordering
   assert.strictEqual(

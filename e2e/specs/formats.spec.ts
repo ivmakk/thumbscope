@@ -47,6 +47,21 @@ test.describe('thumbcache_96.db transparency', () => {
   })
 })
 
+// Unsupported-but-real type: a valid SQLite DB that isn't a thumbnail cache (media-library
+// index, no image BLOBs). The whole app must reject it with the SQLite-specific headline
+// (not the generic "unsupported file" fallback) and render no grid.
+test.describe('media-index.db', () => {
+  test.use({ sample: 'media-index.db' })
+
+  test('rejects a non-thumbnail SQLite DB with the SQLite headline', async ({ page, grid }) => {
+    const err = page.getByTestId('open-error')
+    await expect(err).toBeVisible()
+    await expect(err).toContainText('SQLite database')
+    await expect(err).not.toContainText('Unsupported file')
+    expect(await grid.count()).toBe(0) // nothing rendered for an unopened DB
+  })
+})
+
 // Corrupt container: the parser carves raw JPEG runs (10 thumbnails, positional `#n`
 // labels, no dates) -> recovered: true -> the amber recovery banner is shown.
 test.describe('Thumbs-corrupt.db', () => {
